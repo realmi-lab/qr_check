@@ -1,0 +1,29 @@
+[project]
+name = "roombot"
+version = "0.1.0"
+description = "다우오피스 회의실 예약 조회 + QR 체크인 노쇼 방지 슬랙봇"
+requires-python = ">=3.12"
+dependencies = [
+  "slack-bolt>=1.21",
+  "slack-sdk>=3.33",
+  "fastapi>=0.115",
+  "uvicorn>=0.32",
+  "psycopg[binary,pool]>=3.2",
+  "apscheduler>=3.10,<4",
+  "qrcode[pil]>=8.0",
+  "itsdangerous>=2.2",
+  "python-dotenv>=1.0",
+  "python-multipart>=0.0.32",
+  "websocket-client>=1.9.2",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[tool.uv]
+# 나온 지 2주가 안 된 패키지 버전은 쓰지 않음
+exclude-newer = "2026-10-03T00:00:00Z"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

@@ -1,0 +1,44 @@
+# 슬랙 앱 만들기: https://api.slack.com/apps → Create New App → From a manifest → 이 내용 붙여넣기
+# 붙여넣기 전에 YOUR-DOMAIN 을 QR 체크인 웹 주소(PUBLIC_BASE_URL)로 바꾸세요.
+display_information:
+  name: 회의실봇
+  description: 회의실 예약 현황 조회와 QR 체크인 노쇼 방지
+  background_color: "#4a154b"
+features:
+  app_home:
+    home_tab_enabled: true
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
+  bot_user:
+    display_name: roombot
+    always_online: true
+  slash_commands:
+    - command: /room
+      description: 회의실 현황·일정·빈 회의실·내 예약 조회
+      usage_hint: "now | 무등 내일 | free 10/20 14:00 1h 6명 | my"
+      should_escape: false
+oauth_config:
+  redirect_urls:
+    - https://anything-aluminum-golf-termination.trycloudflare.com/auth/slack/callback
+  scopes:
+    user:
+      - openid
+      - email
+      - profile
+    bot:
+      - commands
+      - chat:write
+      - im:history
+      - im:write
+      - users:read
+      - users:read.email
+settings:
+  event_subscriptions:
+    bot_events:
+      - app_home_opened
+      - message.im
+  interactivity:
+    is_enabled: true
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false

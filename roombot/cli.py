@@ -1,0 +1,77 @@
+"""터미널에서 슬랙 없이 확인하는 CLI.
+
+  uv run python -m roombot.cli room now
+  uv run python -m roombot.cli room 무등 내일
+  uv run python -m roombot.cli room free 10/20 14:00 1h 6명
+  uv run python -m roombot.cli --as D0001 room my
+  uv run python -m roombot.cli --as D0001 checkin R19      QR 체크인 흉내 (토큰 확인 생략)
+  uv run python -m roombot.cli tick                        노쇼 처리·알림 한 번 실행 (알림은 화면에 출력)
+  uv run python -m roombot.cli qr                          회의실 QR 이미지 만들기
+
+  --now 2026-10-17T10:03   가상 시계로 실행
+"""
+
+import argparse
+import re
+import sys
+from datetime import datetime
+
+from roombot import checkin, clock, commands, rooms
+
+
+def plain(mrkdwn: str) -> str:
+    """슬랙 mrkdwn을 터미널용으로 단순화."""
+    return re.sub(r"[*`]", "", mrkdwn)
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(prog="roombot")
+    p.add_argument("--now", help="가상 시각 (예: 2026-10-17T10:03)")
+    p.add_argument("--as", dest="as_emp", help="이 사번의 직원으로 실행 (예: D0001)")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("room", help="/room 명령과 같음")
+    r.add_argument("text", nargs="*")
+    c = sub.add_parser("checkin", help="QR 체크인 흉내")
+    c.add_argument("room_code")
+    sub.add_parser("tick", help="노쇼 처리와 알림 한 번 실행")
+    q = sub.add_parser("qr", help="회의실 QR 이미지 만들기")
+    q.add_argument("--out", default="qr")
+    a = p.parse_args(argv)
+
+    if a.now:
+        at = datetime.fromisoformat(a.now)
+        clock.freeze(at if at.tzinfo else at.replace(tzinfo=clock.TZ))
+
+    emp = None
+    if a.as_emp:
+        emp = rooms.employee_by_emp_no(a.as_emp)
+        if not emp:
+            print(f"사번 {a.as_emp} 직원이 없어요.", file=sys.stderr)
+            return 1
+
+    if a.cmd == "room":
+        print(plain(commands.handle(" ".join(a.text), emp).text))
+    elif a.cmd == "checkin":
+        if not emp:
+            print("--as 사번 이 필요해요.", file=sys.stderr)
+            return 1
+        found = rooms.find_rooms(a.room_code)
+        if len(found) != 1:
+            print(f"회의실 '{a.room_code}'을(를) 하나로 특정하지 못했어요.", file=sys.stderr)
+            return 1
+        from roombot import messages
+        res = checkin.check_in(found[0], emp["id"], source_ip="127.0.0.1", user_agent="cli")
+        title, body = messages.checkin_page_text(res)
+        print(f"[{res.kind}] {title}\n{body}")
+    elif a.cmd == "tick":
+        from roombot import notifier, scheduler
+        scheduler.run_once(notifier.ConsoleNotifier())
+    elif a.cmd == "qr":
+        from roombot import qr
+        out = qr.generate(a.out)
+        print(f"QR 이미지와 인쇄용 페이지를 만들었어요: {out}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
