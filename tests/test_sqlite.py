@@ -312,7 +312,11 @@ def test_small_wrapped_layouts_have_no_horizontal_tables(monkeypatch):
         assert not any(block['type']=='table' for block in reply.blocks)
         assert len(reply.blocks)<50
     status=commands.status_reply()
-    assert len(status.blocks)==4
+    assert any('9A' in str(block) and block['type']=='context' for block in status.blocks)
+    assert any('Bitcoin' in str(block) and block['type']=='context' for block in status.blocks)
+    floor=commands.status_reply(only_floor=9)
+    assert any('9A' in str(block) and block['type']=='context' for block in floor.blocks)
+    assert not any('Bitcoin' in str(block) and block['type']=='context' for block in floor.blocks)
     assert sum(block['type']=='image' for block in status.blocks)==1
     for reply in replies[:2]:
         assert not any(element.get('url') for block in reply.blocks for element in block.get('elements',[]))

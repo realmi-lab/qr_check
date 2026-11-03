@@ -339,8 +339,7 @@ def status_reply(only_floor: int | None = None, surface: str = "message") -> Rep
                     f"{chart_title} — 09:00–18:00, 회의명·예약 시간·상태"),
               actions(room_menu(now.date()), button("미팅룸", "open_finder", style="primary"),
                       button("내 예약", "show_my")))
-    if not chart:
-        reply.add(*status_tables(rows, now.date()))
+    reply.add(*status_tables(rows, now.date()))
     return reply
 
 
