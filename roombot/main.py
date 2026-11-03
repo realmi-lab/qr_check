@@ -34,6 +34,8 @@ def watch_slack(handler) -> None:
             log.warning("슬랙 연결 끊김 %d/%d", bad, SOCKET_FAIL_LIMIT)
         if bad >= SOCKET_FAIL_LIMIT:
             log.error("슬랙 연결이 %d분째 끊겨 있어 서버를 다시 시작함", bad)
+            from roombot import image_host
+            image_host.stop()
             os._exit(1)
 
 
@@ -75,6 +77,8 @@ def main() -> None:
 
     from roombot.db import initialize
     initialize()
+    from roombot import image_host
+    image_host.start()
     notifier = default_notifier()
     web.app.state.notifier = notifier
     scheduler.start(notifier)
@@ -102,7 +106,10 @@ def main() -> None:
         log.info("SLACK_BOT_TOKEN / SLACK_APP_TOKEN 이 없어 슬랙봇은 켜지 않음 (CLI로 확인 가능)")
 
     log.info("QR 체크인 웹: %s", settings.public_base_url)
-    uvicorn.run(web.app, host="0.0.0.0", port=settings.web_port, log_level="warning")
+    try:
+        uvicorn.run(web.app, host="0.0.0.0", port=settings.web_port, log_level="warning")
+    finally:
+        image_host.stop()
 
 
 if __name__ == "__main__":

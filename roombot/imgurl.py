@@ -9,7 +9,7 @@ from roombot import clock
 from roombot.config import settings
 
 TTL = 7 * 86400   # 7일
-IMAGE_VERSION = "schedule-v2"   # 표시 변경 후에는 이전 이미지 캐시를 재사용하지 않음
+IMAGE_VERSION = "mobile-v3"   # 표시 변경 후에는 이전 이미지 캐시를 재사용하지 않음
 
 
 def _sig(kind: str, params: dict) -> str:
@@ -19,14 +19,20 @@ def _sig(kind: str, params: dict) -> str:
 
 def url(kind: str, **params) -> str | None:
     """슬랙이 가져갈 수 있는 https 주소일 때만 만듦 (localhost면 None → 그림 없이 글자만)."""
-    if not settings.public_base_url.startswith("https://"):
+    base = settings.image_base_url or settings.public_base_url
+    if not base.startswith("https://"):
         return None
     params = {k: v for k, v in params.items() if v is not None}
     params["rev"] = IMAGE_VERSION
     params["v"] = int(clock.now().timestamp() // 300)   # 5분마다 새 그림 (슬랙 캐시 갱신)
     params["e"] = int(time.time()) + TTL
     params["s"] = _sig(kind, params)
-    return f"{settings.public_base_url}/img/{kind}.png?{urlencode(params)}"
+    return f"{base}/img/{kind}.png?{urlencode(params)}"
+
+
+def viewer(kind: str, **params) -> str | None:
+    source = url(kind, **params)
+    return source.replace(f"/img/{kind}.png?", f"/view/{kind}?") if source else None
 
 
 def render(kind: str, params: dict) -> bytes | None:
@@ -48,25 +54,13 @@ def render(kind: str, params: dict) -> bytes | None:
 
 
 def src(kind: str, alt: str = "", **params) -> dict | None:
-    """그림 블록의 출처. 슬랙에 올릴 수 있으면 slack_file(터널 주소가 바뀌어도 안 깨짐), 아니면 서명된 주소."""
-    from roombot import slackfiles
-    params = {k: v for k, v in params.items() if v is not None}
-    params["rev"] = IMAGE_VERSION
-    if slackfiles.can_upload():
-        key = (kind, tuple(sorted((k, str(v)) for k, v in params.items())), int(clock.now().timestamp() // 300))
-        fid = slackfiles.cached(key)
-        if not fid and slackfiles.quick():
-            # 기다릴 수 없음 → 뒤에서 올려 두고 이번엔 주소 그림
-            import threading
-            threading.Thread(target=lambda: (png := render(kind, params)) and slackfiles.upload(key, png, alt or kind),
-                             daemon=True).start()
-        elif not fid:
-            png = render(kind, params)
-            fid = png and slackfiles.upload(key, png, alt or kind)
-        if fid:
-            return {"slack_file": {"id": fid}}
-    u = url(kind, **params)
-    return {"image_url": u} if u else None
+    """뷰어 권한과 무관하게 가져올 수 있는 서명된 HTTPS 이미지 사용.
+
+    채널에 공유하지 않은 봇 전용 slack_file은 사용자에게 깨져 보일 수 있어 쓰지 않는다.
+    HTTPS 경로가 준비되지 않았으면 이미지 블록을 생략하고 본문을 제공한다.
+    """
+    source = url(kind, **params)
+    return {"image_url": source} if source else None
 
 
 def verify(kind: str, params: dict) -> bool:

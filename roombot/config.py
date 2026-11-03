@@ -38,6 +38,11 @@ class Settings:
     # QR 체크인 웹
     public_base_url: str = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
     web_port: int = int(os.getenv("WEB_PORT", "8000"))
+    # 일정 이미지만 제공하는 HTTPS 주소. QR 웹의 공개 주소와 분리한다.
+    image_base_url: str = os.getenv("IMAGE_BASE_URL", "").rstrip("/")
+    image_port: int = int(os.getenv("IMAGE_PORT", "8001"))
+    image_tunnel: bool = _bool("IMAGE_TUNNEL")
+    cloudflared_bin: str = os.getenv("CLOUDFLARED_BIN", "cloudflared")
     secret_key: str = os.getenv("SECRET_KEY", "dev-secret-change-me")
     # QR 토큰 계산용 비밀값. 바꾸면 인쇄한 QR이 모두 무효가 되므로 한 번 정하면 그대로 둠
     qr_secret: str = os.getenv("QR_SECRET", "dev-qr-secret-change-me")

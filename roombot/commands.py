@@ -284,14 +284,7 @@ def _room_cells(r: dict, today: date) -> list[str]:
 
 
 def floor_sections(rows: list[dict], today: date) -> list[dict]:
-    """층마다 한 덩어리: 굵은 층 이름 + [회의실 | 지금·다음] 2칸 표."""
-    out = []
-    for fl in sorted({r["floor"] for r in rows}):
-        cells = [c for r in rows if r["floor"] == fl for c in _room_cells(r, today)]
-        for i in range(0, len(cells), 10):      # 한 덩어리에 칸은 10개까지
-            out.append(section(f"*{fl}층*" if i == 0 else "", fields=cells[i:i + 10]))
-        out.append(divider())
-    return out
+    return status_tables(rows,today)
 
 
 def _status_now_cell(r: dict, today: date) -> dict:
@@ -304,26 +297,30 @@ def _status_now_cell(r: dict, today: date) -> dict:
 
 
 def status_tables(rows: list[dict], today: date) -> list[dict]:
-    """인원을 회의실 칸에 합친 3열 표."""
-    groups = []
-    for fl in sorted({r["floor"] for r in rows}):
-        fr = sorted([r for r in rows if r["floor"] == fl], key=lambda x: x["room_id"])
-        groups.append((f"{fl}층", [[rt((r["short_name"], B), (f" · {r['capacity']}인", I)),
-                                                 rt(style.badge(r["state"])), _status_now_cell(r, today)] for r in fr]))
-    return tables(["회의실", "상태", "지금 · 다음"], groups,
-                  wrap=[False, False, True])
+    """가로 표 없이 방마다 작은 글씨 한 줄, 예약이 있으면 다음 줄에 표시."""
+    from html import escape
+    out=[]
+    for floor in sorted({row['floor'] for row in rows}):
+        out.append(context(f"*{floor}층*"))
+        for row in sorted((r for r in rows if r['floor']==floor),key=lambda r:r['room_id']):
+            text=f"*{escape(row['short_name'])}* · {row['capacity']}인 · {style.badge(row['state'])}"
+            if row['current_reservation_id']:
+                text+=f"\n~{hm(row['current_end_at'])} {escape(clip(row['current_title'],TITLE_SHORT))} · {escape(row['current_organizer'])}"
+            elif row['next_start_at'] and row['next_start_at'].date()==today:
+                text+=f"\n다음 {hm(row['next_start_at'])} {escape(clip(row['next_title'],TITLE_SHORT))}"
+            out.append(context(text))
+    return out
 
 
 def floor_summary(rows: list[dict]) -> dict:
-    """홈에서는 층별 수량만 보여 주고 상세 조회로 연결."""
-    summary = []
-    for floor in sorted({r["floor"] for r in rows}):
-        floor_rows = [r for r in rows if r["floor"] == floor]
-        using = sum(r["state"] == "사용중" for r in floor_rows)
-        waiting = sum(r["state"] in ("체크인 대기", "노쇼 처리 대기", "곧 시작") for r in floor_rows)
-        free = sum(r["state"] == "비어있음" for r in floor_rows)
-        summary.append([rt((f"{floor}층", B)), rt(str(using)), rt(str(waiting)), rt(str(free))])
-    return table(["층", "사용", "대기", "빈방"], summary, align=["left", "right", "right", "right"])
+    lines=[]
+    for floor in sorted({r['floor'] for r in rows}):
+        group=[r for r in rows if r['floor']==floor]
+        using=sum(r['state']=='사용중' for r in group)
+        waiting=sum(r['state'] in ('체크인 대기','노쇼 처리 대기','곧 시작') for r in group)
+        free=sum(r['state']=='비어있음' for r in group)
+        lines.append(f"*{floor}층* · 사용 {using} · 대기 {waiting} · 빈방 {free}")
+    return context("\n".join(lines))
 
 
 def status_reply(only_floor: int | None = None, surface: str = "message") -> Reply:
@@ -335,11 +332,13 @@ def status_reply(only_floor: int | None = None, surface: str = "message") -> Rep
     chart_title = f"{only_floor}층 회의실 일정" if only_floor is not None else "전체 회의실 일정"
     free_now = sum(1 for r in rows if r["state"] == "비어있음")
     reply = Reply(fallback=f"회의실 현황 {fmt_day(now.date())} {hm(now)} · 비어있음 {free_now}곳")
+    large_view = imgurl.viewer("board", d=now.date().isoformat(), f=only_floor)
     reply.add(header(title),
               context(f"{style.DATE} *{fmt_day(now.date())} {hm(now)}* 기준", status_counts(rows)),
               image(imgurl.src("board", chart_title, d=now.date().isoformat(), f=only_floor),
                     f"{chart_title} — 09:00–18:00, 회의명·예약 시간·상태"),
-              actions(room_menu(now.date()), button("빈방 찾기", "open_finder", style="primary")))
+              actions(room_menu(now.date()), button("빈방 찾기", "open_finder", style="primary"),
+                      button("크게 보기", "view_board", url=large_view) if large_view else None))
     if surface == "modal":
         reply.add(divider(), *floor_sections(rows, now.date()))
     else:
@@ -470,31 +469,19 @@ def schedule_reply(room: dict, day: date, surface: str = "message") -> Reply:
 
     if not sched:
         reply.add(section(f"{icon('비어있음')} 이 날은 예약이 없어요. *09:00–18:00* 모두 비어 있어요."))
-    elif surface != "modal":
-        reply.add(*schedule_tables(sched, free))
     else:
-        # 창(modal)에서는 표를 못 써서 2칸 목록 — 줄마다 가로선을 넣어 구분
-        reply.add(divider(), section("", fields=["*시간*", "*회의 · 참석자*"]), divider())
-        for _, kind, r in _schedule_rows(sched, free)[:40]:
-            if kind == "free":
-                reply.add(section("", fields=[f"{icon('비어있음')} {bspan(r['start_at'], r['end_at'])}", "_예약없음_"]),
-                          divider())
-                continue
-            note = _status_note(r)
-            t = f"#{r['id']} " + clip(r["title"], TITLE_MID)
-            title = f"~{t}~" if r["state"] == "노쇼 취소" else f"*{t}*"
-            reply.add(section("", fields=[
-                f"{icon(r['state'])} {bspan(r['start_at'], r['end_at'])}" + (f"\n{note}" if note else ""),
-                f"{title}\n{people_line(r['attendees'], r['organizer_name'])}"]), divider())
+        reply.add(*schedule_tables(sched, free))
     if sched and day >= today and not free:
         reply.add(context("남은 빈 시간이 없어요."))
 
     prev_d, next_d = day - timedelta(days=1), day + timedelta(days=1)
+    large_view = imgurl.viewer("room", r=room["code"], d=day.isoformat())
     reply.add(actions(
         button(f"◀ {fmt_day(prev_d)}", "day_nav:prev", room_value(room["code"], prev_d)),
         button("오늘", "day_nav:today", room_value(room["code"], today)) if day != today else None,
         button(f"{fmt_day(next_d)} ▶", "day_nav:next", room_value(room["code"], next_d)),
         button("빈방 찾기", "open_finder"),
+        button("크게 보기", "view_room", url=large_view) if large_view else None,
         room_menu(day, action_id="room_switch"),   # 같은 날짜의 다른 회의실 일정으로 바꿔 보기
     ))
     return reply
@@ -641,42 +628,21 @@ def my_reply(employee: dict | None, surface: str = "message") -> Reply:
               context(f"{employee['department']}   오늘부터 7일   *{len(rows)}건*"))
     if not rows:
         return reply.add(section("예약이 없어요.\n`/룸 예약 9A 내일 14:00 1h 회의제목`으로 등록해 주세요."), quick_actions(my=False))
-    if surface != "modal":
-        by_day: dict[date, list] = {}
-        for r in rows:
-            note = _status_note(r) if r["state"] != "종료" else ""
-            st = _state_cell(r, note)
-            if r["i_checked_in"]:
-                st += f"\n{style.OK} 내가 체크인"
-            t = f"#{r['id']} " + clip(r["title"], TITLE_MID)
-            title = (t, S) if r["state"] == "노쇼 취소" else (t, B)
-            by_day.setdefault(r["start_at"].date(), []).append(
-                [rt((span(r["start_at"], r["end_at"]), B)), rt(title), rt(r["room_name"]),
-                 rt("예약자" if r["i_am_organizer"] else "참석"), rt(st)])
-        reply.add(*tables(["시간", "회의", "회의실", "역할", "상태"],
-                          [(f"{style.DATE} {fmt_day(d)}", rs) for d, rs in by_day.items()],
-                          wrap=[False, True, False, False, True])[:44],
-                  quick_actions(my=False))
-        return reply
-    reply.add(divider(), section("", fields=["*시간*", "*회의 · 회의실*"]), divider())
-    last_day, count = None, 0
+    by_day: dict[date, list] = {}
     for r in rows:
-        if count >= 30:      # 창은 덩어리 100개까지 (줄 + 가로선)
-            reply.add(context(f"외 {len(rows) - count}건"))
-            break
-        d = r["start_at"].date()
-        if d != last_day:
-            reply.add(context(f"{style.DATE} *{fmt_day(d)}*"))
-            last_day = d
         note = _status_note(r) if r["state"] != "종료" else ""
-        mine = f"\n{style.OK} 내가 체크인" if r["i_checked_in"] else ""
+        st = _state_cell(r, note)
+        if r["i_checked_in"]:
+            st += f"\n{style.OK} 내가 체크인"
         t = f"#{r['id']} " + clip(r["title"], TITLE_MID)
-        title = f"~{t}~" if r["state"] == "노쇼 취소" else f"*{t}*"
-        reply.add(section("", fields=[
-            f"{icon(r['state'])} {bspan(r['start_at'], r['end_at'])}" + (f"\n{note}" if note else "") + mine,
-            f"{title}\n{style.ROOM} {r['room_name']}  ·  {'예약자' if r['i_am_organizer'] else '참석'}"]), divider())
-        count += 1
-    reply.add(divider(), quick_actions(my=False))
+        title = (t, S) if r["state"] == "노쇼 취소" else (t, B)
+        by_day.setdefault(r["start_at"].date(), []).append(
+            [rt((span(r["start_at"], r["end_at"]), B)), rt(title), rt(r["room_name"]),
+             rt("예약자" if r["i_am_organizer"] else "참석"), rt(st)])
+    reply.add(*tables(["시간", "회의", "회의실", "역할", "상태"],
+                      [(f"{style.DATE} {fmt_day(d)}", rs) for d, rs in by_day.items()],
+                      wrap=[False, True, False, False, True])[:44],
+              quick_actions(my=False))
     return reply
 
 

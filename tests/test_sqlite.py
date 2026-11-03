@@ -293,3 +293,58 @@ def test_finder_and_booking_handlers_without_slack_network(monkeypatch):
         assert conn.execute('SELECT title FROM reservations').fetchone()['title']=='앱 예약'
     handlers['booking_submit'](lambda **data:answers.append(data),{'user':{'id':'U1'}},form,client)
     assert answers[-1]['response_action']=='errors'
+
+
+def test_small_wrapped_layouts_have_no_horizontal_tables(monkeypatch):
+    from roombot.slack_app import home_view
+    monkeypatch.setattr(settings,'image_base_url','https://images.example.test')
+    reservation()
+    clock.freeze(at(9,5))
+    replies=[commands.status_reply(),commands.schedule_reply(rooms.all_rooms()[0],at().date()),
+             commands.my_reply(rooms.employee_by_id(1)),commands.free_search(at(10),timedelta(hours=1))]
+    for reply in replies:
+        assert not any(block['type']=='table' for block in reply.blocks)
+        assert len(reply.blocks)<50
+    status=commands.status_reply()
+    assert any('9A' in str(block) and block['type']=='context' for block in status.blocks)
+    assert any(element.get('url','').startswith('https://images.example.test/view/')
+               for block in status.blocks for element in block.get('elements',[]) if block['type']=='actions')
+    assert not any(block['type']=='table' for block in home_view(rooms.employee_by_id(1))['blocks'])
+
+
+def test_image_source_never_uses_unshared_bot_files(monkeypatch):
+    from roombot import imgurl,slackfiles
+    monkeypatch.setattr(slackfiles,'can_upload',lambda:pytest.fail('private file upload must not be used'))
+    monkeypatch.setattr(settings,'image_base_url','https://images.example.test')
+    monkeypatch.setattr(settings,'public_base_url','http://localhost:8000')
+    source=imgurl.src('board',d='2026-11-04')
+    assert source['image_url'].startswith('https://images.example.test/img/board.png?')
+    assert 'slack_file' not in source
+    monkeypatch.setattr(settings,'image_base_url','')
+    assert imgurl.src('board',d='2026-11-04') is None
+
+
+def test_image_only_host_signed_viewer_and_head(monkeypatch):
+    import time as epoch
+    from urllib.parse import urlparse,parse_qs
+    from fastapi.testclient import TestClient
+    from roombot import image_host,imgurl
+    monkeypatch.setattr(settings,'image_base_url','https://images.example.test')
+    client=TestClient(image_host.app)
+    for path in ['/','/docs','/openapi.json','/c/9A','/demo','/auth/slack','/view/board','/img/board.png']:
+        assert client.get(path).status_code==404
+    assert client.get('/healthz').json()=={'ok':True}
+    url=imgurl.viewer('board',d='2026-11-04')
+    parsed=urlparse(url)
+    params={key:values[0] for key,values in parse_qs(parsed.query).items()}
+    response=client.get(parsed.path,params=params)
+    assert response.status_code==200
+    assert 'width=device-width' in response.text and '화면에 맞추기' in response.text
+    assert '/img/board.png?' in response.text
+    assert response.headers['referrer-policy']=='no-referrer'
+    assert client.head('/img/board.png',params=params).status_code==200
+    params['d']='2026-11-05'
+    assert client.get('/view/board',params=params).status_code==404
+    params['e']=str(int(epoch.time())-1)
+    params['s']=imgurl._sig('board',params)
+    assert client.get('/img/board.png',params=params).status_code==404

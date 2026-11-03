@@ -438,6 +438,10 @@ def build_app() -> App:
         uid = body["user"]["id"]
         client.views_publish(user_id=uid, view=home_view(employee_for(client, uid)))
 
+    @app.action(re.compile(r"^view_(board|room)$"))
+    def view_in_browser(ack):
+        ack()  # 버튼 URL은 Slack 내장 브라우저가 연다.
+
     # 조건 변경 즉시 같은 창의 빈방 목록을 갱신한다.
     @app.action(re.compile(r"^finder_(date|time|dur)$"))
     def finder_changed(ack, body, client):

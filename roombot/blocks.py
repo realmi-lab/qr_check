@@ -131,15 +131,23 @@ TABLE_MAX_ROWS = 8   # 슬랙은 9줄부터 표를 접고 '전체 표 열기' �
 
 
 def tables(header_cells: list[str], groups: list[tuple[str, list[list[dict]]]], wrap=None, align=None) -> list[dict]:
-    """[(제목, 줄들)] → 제목 + 8줄 이하 표들. 줄이 많은 묶음은 이어서 나눔."""
+    """모바일에서 잘리지 않는 작은 글씨의 한 열 목록."""
     out = []
+    shown = 0
+    total = sum(len(rows) for _, rows in groups)
     for title, rows in groups:
         if not rows:
             continue
-        for i in range(0, len(rows), TABLE_MAX_ROWS):
-            if title:
-                out.append(context(f"*{title}*" + (" (이어서)" if i else "")))
-            out.append(table(header_cells, rows[i:i + TABLE_MAX_ROWS], wrap=wrap, align=align))
+        if title:
+            out.append(context(f"*{title}*"))
+        for row in rows:
+            if shown >= 32:
+                out.append(context(f"외 {total-shown}건 · 날짜나 회의실을 선택해 범위를 좁혀 주세요."))
+                return out
+            cells = [_cell_text(cell) for cell in row]
+            lines = [escape(value, quote=False) for value in cells if value.strip()]
+            out.append(context("\n".join(lines)))
+            shown += 1
     return out
 
 
