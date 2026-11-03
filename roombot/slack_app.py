@@ -180,8 +180,7 @@ def home_view(employee: dict | None) -> dict:
     blocks: list[dict] = [
         header("회의실봇"),
         context(f"{style.DATE} *{commands.fmt_day(now.date())} {commands.hm(now)}* 기준   지금 비어 있는 회의실 *{free_now}곳*"),
-        actions(button("미팅룸", "open_finder", style="primary"),
-                button("전체 일정", "show_now"), button("내 예약", "show_my")),
+        commands.quick_actions(),
     ]
     if employee:
         blocks += commands.next_meeting_block(employee)
@@ -234,7 +233,7 @@ def build_app() -> App:
             return
         if reply.open_finder:
             reply = Reply().add(section("아래 버튼으로 찾기 창을 열어주세요."),
-                                actions(button("미팅룸", "open_finder", style="primary")))
+                                commands.quick_actions())
         say(**reply.slack())
 
     # ----- 버튼 / 메뉴 -----
@@ -429,6 +428,19 @@ def build_app() -> App:
     def show_stats(ack, body, client, respond):
         ack()
         show(body, client, respond, lambda sf: commands.stats_reply(), "노쇼 통계")
+
+    @app.action("navigate")
+    def navigate(ack, body, client, respond):
+        ack()
+        chosen = body['actions'][0]['selected_option']['value']
+        if chosen == 'open_finder':
+            open_finder(lambda:None,body,client)
+        elif chosen == 'show_now':
+            show_now(lambda:None,body,client,respond)
+        elif chosen == 'show_my':
+            show_my(lambda:None,body,client,respond)
+        elif chosen == 'show_stats':
+            show_stats(lambda:None,body,client,respond)
 
     @app.action("refresh_home")
     def refresh_home(ack, body, client):

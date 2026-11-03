@@ -94,15 +94,19 @@ def room_menu(day: date, action_id: str = "room_pick") -> dict:
     return grouped_select("회의실 선택", action_id, groups)
 
 
+def navigation_menu(*, finder: bool = True, my: bool = True, now: bool = True,
+                    stats: bool = False) -> dict | None:
+    choices = [("미팅룸", "open_finder", finder), ("전체 일정", "show_now", now),
+               ("내 예약", "show_my", my), ("통계", "show_stats", stats)]
+    options = [{"text":{"type":"plain_text","text":label},"value":value}
+               for label,value,enabled in choices if enabled]
+    return {"type":"overflow","action_id":"navigate","options":options} if options else None
+
+
 def quick_actions(*, finder: bool = True, my: bool = True, now: bool = True, stats: bool = False,
                   menu_day: date | None = None) -> dict | None:
-    return actions(
-        room_menu(menu_day) if menu_day else None,
-        button("미팅룸", "open_finder", style="primary") if finder else None,
-        button("전체 일정", "show_now") if now else None,
-        button("내 예약", "show_my") if my else None,
-        button("통계", "show_stats") if stats else None,
-    )
+    return actions(room_menu(menu_day) if menu_day else None,
+                   navigation_menu(finder=finder,my=my,now=now,stats=stats))
 
 
 # ---------------------------------------------------------------
@@ -337,8 +341,7 @@ def status_reply(only_floor: int | None = None, surface: str = "message") -> Rep
               context(f"{style.DATE} *{fmt_day(now.date())} {hm(now)}* 기준", status_counts(rows)),
               image(chart,
                     f"{chart_title} — 09:00–18:00, 회의명·예약 시간·상태"),
-              actions(room_menu(now.date()), button("미팅룸", "open_finder", style="primary"),
-                      button("내 예약", "show_my")))
+              quick_actions(now=False,menu_day=now.date()))
     reply.add(*status_tables(rows, now.date()))
     return reply
 
@@ -394,7 +397,7 @@ def floor_day_reply(floor: int, day: date) -> Reply:
         reply.add(section(f"{style.ROOM} *{room['label']}*  ·  {room['capacity']}인  ·  예약 {len(live)}건\n"
                           f"{icon('비어있음')} {free_txt}",
                           accessory=button("일정", f"room_schedule:{room['code']}", room_value(room["code"], day))))
-    reply.add(actions(button("미팅룸", "open_finder", style="primary")))
+    reply.add(quick_actions())
     return reply
 
 
@@ -454,7 +457,7 @@ def schedule_reply(room: dict, day: date, surface: str = "message") -> Reply:
         reply.add(*schedule_tables(sched, free))
     elif not chart:
         reply.add(context("예약 없음 · 09:00–18:00"))
-    reply.add(actions(room_menu(day, action_id="room_switch"), button("미팅룸", "open_finder")))
+    reply.add(actions(room_menu(day, action_id="room_switch"), navigation_menu()))
     return reply
 
 
@@ -487,7 +490,7 @@ def free_reply(args: list[str]) -> Reply:
             return Reply(fallback="입력을 이해하지 못했어요").add(
                 section(f"🤔 *'{a}'*을(를) 이해하지 못했어요."),
                 context("예: `/룸 미팅룸 10/20 오후 2시 1시간 6명` · `/룸 미팅룸 15시 30분`"),
-                actions(button("미팅룸", "open_finder", style="primary")))
+                quick_actions())
 
     if start_t is not None and pm is not None:
         if pm and start_t.hour < 12:
@@ -549,7 +552,7 @@ def free_search(start: datetime, dur: timedelta, cap: int = 1, surface: str = "m
                 break
         reply.add(section("조건에 맞는 빈 회의실이 없어요." + (" 이 시간대는 어때요?" if alts else "")))
         reply.add(actions(*alts))
-    reply.add(context("예약: `/룸 예약 회의실 날짜 시작시각 사용시간 회의제목`"), actions(button("조건 바꾸기", "open_finder")))
+    reply.add(quick_actions())
     return reply
 
 

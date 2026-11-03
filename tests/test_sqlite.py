@@ -299,6 +299,18 @@ def test_finder_and_booking_handlers_without_slack_network(monkeypatch):
     assert calls[-1]['view_id']=='S1'
     picker=calls[-1]['view']['blocks'][0]['accessory']
     assert picker['type']=='datepicker' and picker['initial_date']=='2026-11-05'
+    client.views_open=lambda **data:calls.append(data)
+    for choice in ('open_finder','show_now','show_my','show_stats'):
+        body={'container':{'type':'view'},'view':{'type':'home'},'trigger_id':'T2',
+              'user':{'id':'U1'},'actions':[{'selected_option':{'value':choice}}]}
+        handlers['navigate'](lambda:None,body,client,lambda **data:calls.append(data))
+        assert calls[-1]['trigger_id']=='T2'
+        expected={'open_finder':'미팅룸','show_now':'회의실 현황','show_my':'내 예약','show_stats':'노쇼 통계'}
+        assert calls[-1]['view']['title']['text']==expected[choice]
+    body['container']={'type':'message'}
+    body['actions'][0]['selected_option']['value']='show_now'
+    handlers['navigate'](lambda:None,body,client,lambda **data:calls.append(data))
+    assert calls[-1]['response_type']=='ephemeral'
 
 
 def test_small_wrapped_layouts_have_no_horizontal_tables(monkeypatch):
@@ -322,8 +334,9 @@ def test_small_wrapped_layouts_have_no_horizontal_tables(monkeypatch):
         assert not any(element.get('url') for block in reply.blocks for element in block.get('elements',[]))
         assert '크게 보기' not in str(reply.blocks)
     home=home_view(rooms.employee_by_id(1))
-    labels=[element['text']['text'] for block in home['blocks'] if block['type']=='actions'
-            for element in block['elements']]
+    elements=[element for block in home['blocks'] if block['type']=='actions' for element in block['elements']]
+    assert len(elements)==1 and elements[0]['type']=='overflow'
+    labels=[option['text']['text'] for option in elements[0]['options']]
     assert labels==['미팅룸','전체 일정','내 예약']
     assert commands.handle('미팅룸',rooms.employee_by_id(1)).open_finder
     monkeypatch.setattr(settings,'image_base_url','')
