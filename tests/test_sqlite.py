@@ -311,6 +311,13 @@ def test_finder_and_booking_handlers_without_slack_network(monkeypatch):
     body['actions'][0]['selected_option']['value']='show_now'
     handlers['navigate'](lambda:None,body,client,lambda **data:calls.append(data))
     assert calls[-1]['response_type']=='ephemeral'
+    assert calls[-1]['replace_original']
+    body['container']={'type':'view'}
+    body['view']={'type':'modal','id':'M1'}
+    for choice in ('open_finder','show_now','show_my','show_stats'):
+        body['actions'][0]['selected_option']['value']=choice
+        handlers['navigate'](lambda:None,body,client,lambda **data:calls.append(data))
+        assert calls[-1]['view_id']=='M1'
 
 
 def test_small_wrapped_layouts_have_no_horizontal_tables(monkeypatch):

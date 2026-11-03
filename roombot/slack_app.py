@@ -409,7 +409,7 @@ def build_app() -> App:
         ack()
         view = body.get("view") or {}
         if view.get("type") == "modal":
-            client.views_push(trigger_id=body["trigger_id"], view=finder_view())
+            client.views_update(view_id=view["id"], view=finder_view())
         else:
             client.views_open(trigger_id=body["trigger_id"], view=finder_view())
 
@@ -436,11 +436,12 @@ def build_app() -> App:
         if chosen == 'open_finder':
             open_finder(lambda:None,body,client)
         elif chosen == 'show_now':
-            show_now(lambda:None,body,client,respond)
+            show(body,client,respond,lambda sf:commands.status_reply(surface=sf),'회의실 현황',replace=True)
         elif chosen == 'show_my':
-            show_my(lambda:None,body,client,respond)
+            emp=employee_for(client,body['user']['id'])
+            show(body,client,respond,lambda sf:commands.my_reply(emp,sf),'내 예약',replace=True)
         elif chosen == 'show_stats':
-            show_stats(lambda:None,body,client,respond)
+            show(body,client,respond,lambda sf:commands.stats_reply(),'노쇼 통계',replace=True)
 
     @app.action("refresh_home")
     def refresh_home(ack, body, client):
