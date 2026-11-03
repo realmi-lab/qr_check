@@ -145,6 +145,14 @@ def attendees_of(reservation_ids: list[int]) -> dict[int, list[dict]]:
 
 def room_schedule(room_id: int, day: date) -> list[dict]:
     """하루 예약 목록 (상태, 첫 체크인 정보, 참석자 포함)."""
+    return room_schedules([room_id], day)[room_id]
+
+
+def room_schedules(room_ids: list[int], day: date, *, include_attendees: bool = True) -> dict[int, list[dict]]:
+    """여러 회의실의 하루 일정을 한 번에 조회."""
+    schedules: dict[int, list[dict]] = {room_id: [] for room_id in room_ids}
+    if not schedules:
+        return schedules
     start, end = day_bounds(day)
     with tx() as conn:
         rows = conn.execute(
@@ -154,15 +162,16 @@ def room_schedule(room_id: int, day: date) -> list[dict]:
                  SELECT checked_in_by FROM bot.v_checkin_receipts c
                  WHERE c.reservation_id = v.id ORDER BY c.checked_in_at LIMIT 1
                ) ck ON true
-               WHERE v.room_id = %s AND v.start_at >= %s AND v.start_at < %s
+               WHERE v.room_id = ANY(%s) AND v.start_at >= %s AND v.start_at < %s
                  AND v.state <> '노쇼 취소'          -- 노쇼로 취소된 회의는 일정에서 아예 지움 (그 시간은 빈 시간)
-               ORDER BY v.start_at""",
-            (room_id, start, end),
+               ORDER BY v.room_id, v.start_at, v.id""",
+            (list(schedules), start, end),
         ).fetchall()
-    att = attendees_of([r["id"] for r in rows])
+    att = attendees_of([r["id"] for r in rows]) if include_attendees and rows else {}
     for r in rows:
         r["attendees"] = att.get(r["id"], [])
-    return rows
+        schedules[r["room_id"]].append(r)
+    return schedules
 
 
 def free_windows(schedule: list[dict], day: date) -> list[tuple[datetime, datetime]]:

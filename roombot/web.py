@@ -141,31 +141,32 @@ def _page(kind: str, title: str, rows: list[tuple[str, str]] = (), note: str = "
   @media (prefers-color-scheme: dark) {{ :root {{ --fg:#ededf0; --bg:#141217; --card:#1f1c24; --muted:#a5a3ad; --line:#2e2a35; }}
     .badge {{ filter:brightness(.92) saturate(1.1); }} }}
   * {{ box-sizing:border-box; }}
-  body {{ margin:0; font-family:-apple-system,"Apple SD Gothic Neo","Pretendard",sans-serif; background:var(--bg); color:var(--fg);
+  body {{ margin:0; font:14px/1.5 -apple-system,"Apple SD Gothic Neo","Pretendard",sans-serif; background:var(--bg); color:var(--fg);
           -webkit-font-smoothing:antialiased; }}
-  .top {{ display:flex; align-items:center; gap:10px; max-width:440px; margin:0 auto; padding:18px 16px 0; font-weight:700; }}
-  .top svg {{ width:30px; height:30px; }}
-  main {{ max-width:440px; margin:0 auto; padding:14px 16px 32px; }}
-  .card {{ background:var(--card); border-radius:20px; padding:28px 20px 22px; box-shadow:0 1px 2px rgba(20,10,30,.06), 0 8px 24px rgba(20,10,30,.06); }}
-  .badge {{ width:72px; height:72px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto; }}
-  h1 {{ text-align:center; font-size:23px; letter-spacing:-.3px; margin:14px 0 20px; color:{title_color}; }}
-  .lead {{ margin:-8px 0 18px; padding:12px 14px; border-radius:12px; background:{icons.COLORS.get(kind, icons.COLORS["info"])[1]};
-           color:{title_color}; font-weight:700; font-size:16px; line-height:1.45; text-align:center; word-break:keep-all; }}
-  table {{ width:100%; border-collapse:collapse; font-size:16px; }}
-  th {{ text-align:left; color:var(--muted); font-weight:500; padding:11px 8px 11px 0; width:36%; vertical-align:top; }}
-  td {{ padding:11px 0; font-weight:600; word-break:keep-all; }}
+  .top {{ display:flex; align-items:center; gap:8px; max-width:440px; margin:0 auto; padding:12px 16px 0; font-weight:600; }}
+  .top svg {{ width:24px; height:24px; }}
+  main {{ max-width:440px; margin:0 auto; padding:10px 16px 24px; }}
+  .card {{ background:var(--card); border-radius:14px; padding:20px 16px 16px; box-shadow:0 1px 2px rgba(20,10,30,.06), 0 8px 24px rgba(20,10,30,.06); }}
+  .badge {{ width:52px; height:52px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto; }}
+  .badge svg {{ width:30px; height:30px; }}
+  h1 {{ text-align:center; font-size:19px; letter-spacing:-.3px; margin:10px 0 14px; color:{title_color}; }}
+  .lead {{ margin:-4px 0 12px; padding:10px 12px; border-radius:10px; background:{icons.COLORS.get(kind, icons.COLORS["info"])[1]};
+           color:{title_color}; font-weight:600; font-size:14px; line-height:1.5; text-align:center; word-break:keep-all; }}
+  table {{ width:100%; border-collapse:collapse; font-size:14px; }}
+  th {{ text-align:left; color:var(--muted); font-weight:500; padding:8px 8px 8px 0; width:34%; vertical-align:top; }}
+  td {{ padding:8px 0; font-weight:600; word-break:keep-all; overflow-wrap:anywhere; }}
   tr + tr th, tr + tr td {{ border-top:1px solid var(--line); }}
-  .note {{ margin:18px 0 0; color:var(--muted); font-size:14px; line-height:1.55; }}
+  .note {{ margin:12px 0 0; color:var(--muted); font-size:13px; line-height:1.55; }}
   .center {{ text-align:center; }}
   .dot {{ display:inline-block; width:8px; height:8px; border-radius:50%; background:#2EB67D; margin-right:4px;
           animation:p 1s ease-in-out infinite alternate; }}
   @keyframes p {{ from {{ opacity:.3; }} to {{ opacity:1; }} }}
-  .btn {{ display:flex; align-items:center; justify-content:center; gap:8px; margin-top:20px; padding:15px; border-radius:14px;
-          background:#4a154b; color:#fff; text-decoration:none; font-weight:700; font-size:16px; }}
+  .btn {{ display:flex; align-items:center; justify-content:center; gap:6px; margin-top:14px; padding:0 12px; min-height:44px; box-sizing:border-box; border-radius:10px;
+          background:#4a154b; color:#fff; text-decoration:none; font-weight:600; font-size:14px; }}
   .btn svg {{ width:18px; height:18px; }}
-  form input {{ width:100%; padding:13px; font-size:16px; border-radius:12px; border:1px solid var(--line);
+  form input {{ width:100%; padding:10px; min-height:44px; font-size:16px; border-radius:10px; border:1px solid var(--line);
                background:var(--card); color:var(--fg); }}
-  form button {{ width:100%; margin-top:10px; padding:14px; font-size:16px; font-weight:700; border-radius:12px; border:0;
+  form button {{ width:100%; margin-top:8px; min-height:44px; padding:10px; font-size:14px; font-weight:600; border-radius:10px; border:0;
                 background:#4a154b; color:#fff; }}
   footer {{ text-align:center; color:var(--muted); font-size:12px; margin-top:16px; }}
 </style></head><body>

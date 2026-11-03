@@ -107,7 +107,7 @@ def finder_view(initial: datetime | None = None, minutes: int = 60, cap: int = 1
 
     return {
         "type": "modal", "callback_id": FINDER_ID,
-        "title": {"type": "plain_text", "text": "빈 회의실 찾기"},
+        "title": {"type": "plain_text", "text": "빈방 찾기"},
         "submit": {"type": "plain_text", "text": "찾기"},
         "close": {"type": "plain_text", "text": "닫기"},
         "blocks": [
@@ -147,25 +147,20 @@ def home_view(employee: dict | None) -> dict:
     blocks: list[dict] = [
         header("회의실봇"),
         context(f"{style.DATE} *{commands.fmt_day(now.date())} {commands.hm(now)}* 기준   지금 비어 있는 회의실 *{free_now}곳*"),
-        actions(button(f"{style.FIND} 빈 회의실 찾기", "open_finder", style="primary"),
-                button(f"{style.MY} 내 예약", "show_my"), button(f"{style.STATS} 노쇼 통계", "show_stats"),
-                button(f"{style.REFRESH} 새로고침", "refresh_home")),
-        divider(),
+        actions(button("빈방 찾기", "open_finder", style="primary"),
+                button("내 예약", "show_my"), button("전체 현황", "show_now"),
+                button("통계", "show_stats"), button("새로고침", "refresh_home")),
     ]
     if employee:
         blocks += [context(f"{style.PERSON} *{employee['name']}*님 · {employee['department']}")]
         blocks += commands.next_meeting_block(employee)
     else:
         blocks += commands._not_linked().blocks
-    blocks += [divider(),
-               section(f"*지금 회의실 현황*   {commands.status_counts(rows)}"),
-               image(imgurl.src("board", "회의실 현황판", d=now.date().isoformat()), "회의실 현황판 — 회의실별 오늘 예약 막대"),
+    blocks += [context("*층별 현황* · 전체 현황에서 회의별 상세 조회"),
+               commands.floor_summary(rows),
                actions(commands.room_menu(now.date())),
-               *commands.status_tables(rows, now.date())]
-    blocks += [divider(),
-               context("상태 표시   " + style.legend("사용중", "체크인 대기", "노쇼 처리 대기", "곧 시작", "비어있음")),
-               context(f"{style.QR} 회의 시작 10분 전부터 회의실 입구 QR로 체크인 · 시작 후 10분 안에 체크인이 없으면 자동 취소"),
-               context("`/룸 지금` 현황 · `/룸 9A` 일정표 · `/룸 빈방 오후 2시 1시간 6명` · `/룸 22층` · `/룸 통계` · `/룸` 도움말")]
+               context("QR 체크인: 시작 10분 전~10분 후 · 미체크인 시 자동 취소"),
+               context("`/룸` 도움말 · `/룸 BTC` 일정 · `/룸 22층` 층별 현황")]
     return {"type": "home", "blocks": [b for b in blocks if b][:100]}
 
 

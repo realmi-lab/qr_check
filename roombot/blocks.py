@@ -2,6 +2,7 @@
 
 import json
 import re
+from html import escape
 from dataclasses import dataclass, field
 
 
@@ -42,7 +43,8 @@ class Reply:
 # ---------------------------------------------------------------
 
 def header(text: str) -> dict:
-    return {"type": "header", "text": {"type": "plain_text", "text": text[:150], "emoji": True}}
+    """작은 제목. Slack의 큰 header 대신 context 크기로 표시."""
+    return context(f"*{escape(text[:150], quote=False)}*")
 
 
 def section(md: str, accessory: dict | None = None, fields: list[str] | None = None) -> dict:

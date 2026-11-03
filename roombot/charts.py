@@ -152,27 +152,27 @@ def _legend(d, x, y, items=LEGEND, with_free=True):
 def room_day_png(room: dict, day: date) -> bytes:
     sched = rooms.room_schedule(room["id"], day)
     free = rooms.free_windows(sched, day) if sched else []
-    W, H = 1600, 470
+    W, H = 1600, 410
     img = Image.new("RGBA", (W, H), BG)
     d = ImageDraw.Draw(img)
 
     # 제목
-    d.text((48, 34), room["label"], fill=INK, font=font(44, "bold"))
+    d.text((48, 30), room["label"], fill=INK, font=font(36, "bold"))
     sub = f"{room['floor']}층 · {room['capacity']}인"
-    d.text((48, 92), sub, fill=MUTED, font=font(24, "medium"))
+    d.text((48, 80), sub, fill=MUTED, font=font(22, "medium"))
     wk = "월화수목금토일"[day.weekday()]
     dt = f"{day.month}월 {day.day}일 ({wk})"
-    f = font(30, "bold")
+    f = font(26, "bold")
     d.text((W - 48 - d.textlength(dt, font=f), 38), dt, fill=BRAND, font=f)
     live = [r for r in sched if r["state"] != "노쇼 취소"]
     fm = sum(int((b - a).total_seconds() // 60) for a, b in free)
     summ = f"예약 {len(live)}건 · 빈 시간 {fm // 60}시간 {fm % 60}분".replace(" 0분", "") if free else f"예약 {len(live)}건"
     f2 = font(24, "medium")
-    d.text((W - 48 - d.textlength(summ, font=f2), 92), summ, fill=MUTED, font=f2)
+    d.text((W - 48 - d.textlength(summ, font=f2), 80), summ, fill=MUTED, font=f2)
 
     # 타임라인
     ax = _Axis(day, 70, W - 70)
-    y0, y1 = 190, 330
+    y0, y1 = 160, 280
     d.rounded_rectangle([ax.x0 - 14, y0 - 14, ax.x1 + 14, y1 + 14], radius=18, fill=CARD)
     _grid(d, ax, y0 - 6, y1 + 6, y1 + 26)
     for a, b in free:
@@ -196,10 +196,11 @@ def room_day_png(room: dict, day: date) -> bytes:
 
 def board_png(day: date, only_floor: int | None = None) -> bytes:
     all_rooms = [r for r in rooms.all_rooms() if only_floor is None or r["floor"] == only_floor]
+    schedules = rooms.room_schedules([r["id"] for r in all_rooms], day, include_attendees=False)
     if len(all_rooms) > 6:
-        return _board_wide(day, all_rooms)
+        return _board_wide(day, all_rooms, schedules)
     floors = sorted({r["floor"] for r in all_rooms})
-    ROW, FLOOR_ROW, TOP, BOTTOM, LEFT = 60, 46, 190, 90, 300
+    ROW, FLOOR_ROW, TOP, BOTTOM, LEFT = 52, 40, 170, 80, 300
     W = 1600
     H = TOP + len(floors) * FLOOR_ROW + len(all_rooms) * ROW + BOTTOM
     img = Image.new("RGBA", (W, H), BG)
@@ -207,10 +208,10 @@ def board_png(day: date, only_floor: int | None = None) -> bytes:
 
     now = clock.now()
     title = "회의실 현황판" if only_floor is None else f"{only_floor}층 회의실 현황판"
-    d.text((48, 34), title, fill=INK, font=font(44, "bold"))
+    d.text((48, 30), title, fill=INK, font=font(36, "bold"))
     wk = "월화수목금토일"[day.weekday()]
     when = f"{day.month}월 {day.day}일 ({wk})" + ("  ·  빨간 선이 지금" if now.date() == day else "")
-    d.text((48, 92), when, fill=MUTED, font=font(26, "medium"))
+    d.text((48, 80), when, fill=MUTED, font=font(22, "medium"))
 
     ax = _Axis(day, LEFT, W - 60)
     y = TOP
@@ -220,12 +221,12 @@ def board_png(day: date, only_floor: int | None = None) -> bytes:
         d.line([(48 + 70, y + 24), (LEFT - 24, y + 24)], fill=GRID, width=2)
         y += FLOOR_ROW
         for room in [r for r in all_rooms if r["floor"] == fl]:
-            sched = rooms.room_schedule(room["id"], day)
+            sched = schedules[room["id"]]
             d.rounded_rectangle([40, y + 4, W - 40, y + ROW - 4], radius=14, fill=CARD)
             busy_now = any(r["state"] in ("사용중", "체크인 대기", "노쇼 처리 대기") for r in sched)
             dot = STATE_FILL["사용중"] if busy_now else FREE_LINE
             d.ellipse([60, y + ROW / 2 - 9, 78, y + ROW / 2 + 9], fill=dot)
-            d.text((92, y + ROW / 2 - 17), room["name"], fill=INK, font=font(28, "bold"))
+            d.text((92, y + ROW / 2 - 14), room["name"], fill=INK, font=font(24, "bold"))
             cap = f"{room['capacity']}인"
             fc = font(21, "medium")
             d.text((LEFT - 30 - d.textlength(cap, font=fc), y + ROW / 2 - 12), cap, fill=FAINT, font=fc)
@@ -247,7 +248,7 @@ def board_png(day: date, only_floor: int | None = None) -> bytes:
     return _png(img.convert("RGB"))
 
 
-def _board_wide(day: date, all_rooms: list[dict]) -> bytes:
+def _board_wide(day: date, all_rooms: list[dict], schedules: dict[int, list[dict]]) -> bytes:
     """회의실이 많을 때: 층을 두 줄(왼쪽·오른쪽)로 나눠 가로로 넓게 → 슬랙에서 작아지지 않게."""
     floors = sorted({r["floor"] for r in all_rooms})
     # 회의실 수가 비슷하게 두 덩어리로 나눔
@@ -259,7 +260,7 @@ def _board_wide(day: date, all_rooms: list[dict]) -> bytes:
     cols = [floors[:best], floors[best:]]
 
     W, PAD, GAP = 2400, 56, 64
-    ROW, FLOOR_ROW, TOP, BOTTOM, NAME = 64, 50, 220, 40, 330
+    ROW, FLOOR_ROW, TOP, BOTTOM, NAME = 54, 42, 190, 40, 330
     col_w = (W - PAD * 2 - GAP) / 2
     heights = [len(c) * FLOOR_ROW + sum(1 for r in all_rooms if r["floor"] in c) * ROW for c in cols]
     H = int(TOP + max(heights) + BOTTOM)
@@ -268,9 +269,9 @@ def _board_wide(day: date, all_rooms: list[dict]) -> bytes:
 
     now = clock.now()
     wk = "월화수목금토일"[day.weekday()]
-    d.text((PAD, 40), "회의실 현황판", fill=INK, font=font(56, "bold"))
-    d.text((PAD + d.textlength("회의실 현황판", font=font(56, "bold")) + 28, 58), f"{day.month}월 {day.day}일 ({wk})",
-           fill=MUTED, font=font(34, "medium"))
+    d.text((PAD, 34), "회의실 현황판", fill=INK, font=font(44, "bold"))
+    d.text((PAD + d.textlength("회의실 현황판", font=font(44, "bold")) + 24, 48), f"{day.month}월 {day.day}일 ({wk})",
+           fill=MUTED, font=font(28, "medium"))
     if now.date() == day:
         t = f"지금 {now:%H:%M}"
         f = font(34, "bold")
@@ -279,12 +280,12 @@ def _board_wide(day: date, all_rooms: list[dict]) -> bytes:
         d.text((W - PAD - w - 20, 50), t, fill="#fff", font=f)
     # 범례 (제목 아래)
     x = PAD
-    fl_ = font(28, "medium")
+    fl_ = font(24, "medium")
     for st, name in LEGEND + [("빈", "예약없음")]:
         fill = FREE_FILL if st == "빈" else STATE_FILL[st]
-        d.rounded_rectangle([x, 128, x + 32, 156], radius=8, fill=fill,
+        d.rounded_rectangle([x, 112, x + 28, 136], radius=7, fill=fill,
                             outline=FREE_LINE if st == "빈" else None, width=2)
-        d.text((x + 42, 122), name, fill=MUTED, font=fl_)
+        d.text((x + 38, 106), name, fill=MUTED, font=fl_)
         x += 42 + d.textlength(name, font=fl_) + 40
 
     for ci, col in enumerate(cols):
@@ -304,13 +305,13 @@ def _board_wide(day: date, all_rooms: list[dict]) -> bytes:
             d.text((cx, y + 8), f"{fl}층", fill=BRAND, font=font(32, "bold"))
             y += FLOOR_ROW
             for room in [r for r in all_rooms if r["floor"] == fl]:
-                sched = rooms.room_schedule(room["id"], day)
+                sched = schedules[room["id"]]
                 d.rounded_rectangle([cx - 12, y + 5, cx + col_w + 4, y + ROW - 5], radius=16, fill=CARD)
                 busy_now = any(r["state"] in ("사용중", "체크인 대기", "노쇼 처리 대기") for r in sched)
                 d.ellipse([cx + 4, y + ROW / 2 - 11, cx + 26, y + ROW / 2 + 11],
                           fill=STATE_FILL["사용중"] if busy_now else FREE_LINE)
-                d.text((cx + 40, y + ROW / 2 - 21), _fit(d, room["name"], font(34, "bold"), NAME - 130),
-                       fill=INK, font=font(34, "bold"))
+                d.text((cx + 40, y + ROW / 2 - 17), _fit(d, room["name"], font(28, "bold"), NAME - 130),
+                       fill=INK, font=font(28, "bold"))
                 cap = f"{room['capacity']}인"
                 d.text((cx + NAME - 24 - d.textlength(cap, font=font(26, "medium")), y + ROW / 2 - 15), cap,
                        fill=FAINT, font=font(26, "medium"))

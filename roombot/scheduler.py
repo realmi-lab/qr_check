@@ -36,14 +36,11 @@ def run_once(notifier) -> dict:
     if settings.room_channels and getattr(notifier, "client", None) is not None:
         from roombot import room_channels
         room_channels.refresh_all(notifier.client)
-    # 슬랙에 올리는 그림: 홈·현황에 가장 많이 쓰는 오늘 현황판을 미리 올려 둠 (처음 연 사람이 기다리지 않게)
-    from roombot import imgurl, slackfiles
+    # 홈은 표만 사용하므로 그림은 상세 화면을 요청할 때 만들고, 정리만 시간마다 실행.
+    from roombot import slackfiles
     now = clock.now()
-    if slackfiles.can_upload():
-        if 7 <= now.hour < 21:
-            imgurl.src("board", "회의실 현황판", d=now.date().isoformat())
-        if now.minute == 0 and now.second < 30:
-            slackfiles.cleanup()
+    if now.minute == 0 and now.second < 30:
+        slackfiles.cleanup()
     if cancelled or reminders or briefs:
         log.info("노쇼 취소 %d건, 리마인더 %d건, 아침 브리핑 %d명 (DM %d개)",
                  len(cancelled), len(reminders), len(briefs), len(dms))

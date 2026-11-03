@@ -91,17 +91,17 @@ def room_menu(day: date, action_id: str = "room_pick") -> dict:
     for fl in rooms.floors():
         groups.append((f"{fl}층", [(f"{r['name']} · {r['capacity']}인", room_value(r["code"], day))
                                    for r in rooms.all_rooms() if r["floor"] == fl]))
-    return grouped_select(f"{style.ROOM} 회의실 일정 보기", action_id, groups)
+    return grouped_select("회의실 선택", action_id, groups)
 
 
 def quick_actions(*, finder: bool = True, my: bool = True, now: bool = True, stats: bool = False,
                   menu_day: date | None = None) -> dict | None:
     return actions(
         room_menu(menu_day) if menu_day else None,
-        button(f"{style.FIND} 빈 회의실 찾기", "open_finder", style="primary") if finder else None,
-        button(f"{style.FLOOR} 전체 현황", "show_now") if now else None,
-        button(f"{style.MY} 내 예약", "show_my") if my else None,
-        button(f"{style.STATS} 노쇼 통계", "show_stats") if stats else None,
+        button("빈방 찾기", "open_finder", style="primary") if finder else None,
+        button("전체 현황", "show_now") if now else None,
+        button("내 예약", "show_my") if my else None,
+        button("통계", "show_stats") if stats else None,
     )
 
 
@@ -262,14 +262,26 @@ def _status_now_cell(r: dict, today: date) -> dict:
 
 
 def status_tables(rows: list[dict], today: date) -> list[dict]:
-    """층마다 [회의실 | 인원 | 상태 | 지금 · 다음] 표 (메시지·홈 탭)."""
+    """인원을 회의실 칸에 합친 3열 표."""
     groups = []
     for fl in sorted({r["floor"] for r in rows}):
         fr = sorted([r for r in rows if r["floor"] == fl], key=lambda x: x["room_id"])
-        groups.append((f"{style.FLOOR} {fl}층", [[rt((r["short_name"], B)), rt(f"{r['capacity']}인"),
+        groups.append((f"{fl}층", [[rt((r["short_name"], B), (f" · {r['capacity']}인", I)),
                                                  rt(style.badge(r["state"])), _status_now_cell(r, today)] for r in fr]))
-    return tables(["회의실", "인원", "상태", "지금 · 다음"], groups,
-                  wrap=[False, False, False, True], align=["left", "right", "left", "left"])
+    return tables(["회의실", "상태", "지금 · 다음"], groups,
+                  wrap=[False, False, True])
+
+
+def floor_summary(rows: list[dict]) -> dict:
+    """홈에서는 층별 수량만 보여 주고 상세 조회로 연결."""
+    summary = []
+    for floor in sorted({r["floor"] for r in rows}):
+        floor_rows = [r for r in rows if r["floor"] == floor]
+        using = sum(r["state"] == "사용중" for r in floor_rows)
+        waiting = sum(r["state"] in ("체크인 대기", "노쇼 처리 대기", "곧 시작") for r in floor_rows)
+        free = sum(r["state"] == "비어있음" for r in floor_rows)
+        summary.append([rt((f"{floor}층", B)), rt(str(using)), rt(str(waiting)), rt(str(free))])
+    return table(["층", "사용", "대기", "빈방"], summary, align=["left", "right", "right", "right"])
 
 
 def status_reply(only_floor: int | None = None, surface: str = "message") -> Reply:
@@ -283,7 +295,7 @@ def status_reply(only_floor: int | None = None, surface: str = "message") -> Rep
     reply.add(header(title),
               context(f"{style.DATE} *{fmt_day(now.date())} {hm(now)}* 기준", status_counts(rows)),
               image(imgurl.src("board", "회의실 현황판", d=now.date().isoformat(), f=only_floor), "회의실 현황판 — 회의실별 오늘 예약 막대"),
-              actions(room_menu(now.date()), button(f"{style.FIND} 빈 회의실 찾기", "open_finder", style="primary")))
+              actions(room_menu(now.date()), button("빈방 찾기", "open_finder", style="primary")))
     if surface == "modal":
         reply.add(divider(), *floor_sections(rows, now.date()))
     else:
@@ -438,7 +450,7 @@ def schedule_reply(room: dict, day: date, surface: str = "message") -> Reply:
         button(f"◀ {fmt_day(prev_d)}", "day_nav:prev", room_value(room["code"], prev_d)),
         button("오늘", "day_nav:today", room_value(room["code"], today)) if day != today else None,
         button(f"{fmt_day(next_d)} ▶", "day_nav:next", room_value(room["code"], next_d)),
-        button(f"{style.FIND} 다른 빈 회의실", "open_finder"),
+        button("빈방 찾기", "open_finder"),
         room_menu(day, action_id="room_switch"),   # 같은 날짜의 다른 회의실 일정으로 바꿔 보기
     ))
     return reply

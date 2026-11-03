@@ -131,9 +131,8 @@ def _now_info(room: dict) -> tuple[list[str], bool]:
                 and not r["first_checkin_at"] and r["id"] not in blocked), None)
     using = next((r for r in reversed(today) if r["state"] == "사용중"), None)   # 겹치면 나중 회의
     if due:
-        return ["*체크인하시겠습니까?*",
-                f"유효시간은 *{hm(due['start_at'] + NOSHOW_GRACE)}*까지입니다. "
-                f"(*{mins(due['start_at'] + NOSHOW_GRACE - now)}* 남음)",
+        return [f"*체크인 가능* · *{hm(due['start_at'] + NOSHOW_GRACE)}*까지 "
+                f"({mins(due['start_at'] + NOSHOW_GRACE - now)} 남음)",
                 f"{clip(due['title'], 20)} · {due['organizer_name']}  ({span(due['start_at'], due['end_at'])})"], True
     lines = []
     if using:
@@ -157,7 +156,7 @@ def panel_blocks(room: dict) -> list[dict]:
         section("\n".join(lines)),
         # 이미 채널에 참여한 사람은 [채널 참여]가 안 보이므로 체크인 시간에만 버튼을 보여 줌
         actions(button("✅ 체크인", "panel_checkin", room["code"], style="primary")) if due else None,
-        context("*[✅ 체크인]* 을 누르면 체크인돼요 · 처음이면 *[채널 참여]* 를 먼저 누른 뒤 체크인 · 참석자 중 누구나") if due
+        context("참석자 중 누구나 · 처음이면 [채널 참여] 후 [✅ 체크인]") if due
         else context(f"{style.QR} 회의실에서 모바일 QR로 체크인 준비하세요"),
     ]
     return [b for b in blocks if b]
