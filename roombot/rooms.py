@@ -269,13 +269,13 @@ def stats(days: int = 7) -> dict:
                       count(*) FILTER (WHERE state = '노쇼 취소')                                         AS noshow,
                       count(*)                                                                            AS total
                FROM v_reservations
-               WHERE start_at >= :since AND start_at <= :cutoff AND state <> '취소'""",
+               WHERE NOT is_simulated AND start_at >= :since AND start_at <= :cutoff AND state <> '취소'""",
             params,
         ).fetchone()
         by_room = conn.execute(
             """SELECT room_name, count(*) FILTER (WHERE state = '노쇼 취소') AS noshow, count(*) AS total
                FROM v_reservations
-               WHERE start_at >= :since AND start_at <= :cutoff AND state <> '취소'
+               WHERE NOT is_simulated AND start_at >= :since AND start_at <= :cutoff AND state <> '취소'
                GROUP BY room_name HAVING count(*) FILTER (WHERE state = '노쇼 취소') > 0
                ORDER BY noshow DESC, room_name LIMIT 5""",
             params,
@@ -283,7 +283,7 @@ def stats(days: int = 7) -> dict:
         by_org = conn.execute(
             """SELECT organizer_name, count(*) AS noshow
                FROM v_reservations
-               WHERE start_at >= :since AND state = '노쇼 취소'
+               WHERE NOT is_simulated AND start_at >= :since AND state = '노쇼 취소'
                GROUP BY organizer_name ORDER BY noshow DESC, organizer_name LIMIT 5""",
             params,
         ).fetchall()

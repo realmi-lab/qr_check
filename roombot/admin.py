@@ -148,6 +148,9 @@ def execute(room: dict, start: datetime, end: datetime, reason: str, admin_slack
         blocks = {x["reservation_id"] for x in conn.execute(
             "SELECT reservation_id FROM admin_blocks WHERE reservation_id IN (SELECT value FROM json_each(?))",
             ([r["id"] for r in rows],)).fetchall()}
+        simulated = {row["reservation_id"] for row in conn.execute(
+            "SELECT reservation_id FROM simulation_reservations WHERE reservation_id IN (SELECT value FROM json_each(?))",
+            ([row["id"] for row in rows],)).fetchall()}
         cancelled = []
         for r in rows:
             if r["id"] not in noshow and r["id"] not in blocks:
@@ -174,6 +177,8 @@ def execute(room: dict, start: datetime, end: datetime, reason: str, admin_slack
 
     dms = []
     for r in cancelled:
+        if r["id"] in simulated:
+            continue
         dur = min(r["end_at"] - max(r["start_at"], now), timedelta(hours=2))
         find_at = max(r["start_at"], now)
         msg = Reply(fallback=f"❌ {room['label']} 예약이 취소됐어요 ({reason})", color=RED).add(

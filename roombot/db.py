@@ -70,10 +70,12 @@ def initialize() -> Path:
         try:
             conn.execute("PRAGMA journal_mode=WAL")
             version = conn.execute("PRAGMA user_version").fetchone()["user_version"]
-            if version not in (0, 1):
+            if version not in (0, 1, 2):
                 raise RuntimeError(f"지원하지 않는 SQLite 스키마 버전: {version}")
             if version == 0:
                 conn.executescript(Path(__file__).with_name("schema.sql").read_text())
+            elif version == 1:
+                conn.executescript(Path(__file__).with_name("schema_v2.sql").read_text())
         finally:
             conn.close()
         _ready.add(path)

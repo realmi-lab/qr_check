@@ -9,7 +9,7 @@ from roombot import clock
 from roombot.config import settings
 
 TTL = 7 * 86400   # 7일
-IMAGE_VERSION = "mobile-v3"   # 표시 변경 후에는 이전 이미지 캐시를 재사용하지 않음
+IMAGE_VERSION = "large-type-v4"   # 표시 변경 후에는 이전 이미지 캐시를 재사용하지 않음
 
 
 def _sig(kind: str, params: dict) -> str:

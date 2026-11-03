@@ -65,7 +65,7 @@ def morning_briefs() -> list[tuple[dict, object]]:
     out = []
     for emp in rooms.linked_users():
         meetings = [m for m in rooms.my_reservations(emp["id"], days=0)
-                    if m["start_at"].date() == now.date() and m["end_at"] > now and m["state"] != "노쇼 취소"]
+                    if not m["is_simulated"] and m["start_at"].date() == now.date() and m["end_at"] > now and m["state"] != "노쇼 취소"]
         if meetings:
             out.append((emp, messages.dm_morning_brief(emp, meetings)))
     return out

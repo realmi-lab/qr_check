@@ -261,7 +261,7 @@ def status_counts(rows: list[dict]) -> str:
         key = style.label(r["state"])
         counts[key] = counts.get(key, 0) + 1
     out = []
-    for s in ("사용중", "체크인 대기", "비어있음"):
+    for s in ("사용중", "체크인 대기", "비어있음", "가상 일정"):
         if counts.get(style.label(s)):
             out.append(f"{style.badge(s)} *{counts[style.label(s)]}*")
     return "   ".join(out)

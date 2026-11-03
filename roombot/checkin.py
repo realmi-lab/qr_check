@@ -99,6 +99,7 @@ def check_in(room: dict, employee_id: int, source_ip: str | None = None,
             """SELECT r.id FROM reservations r
                WHERE r.room_id = ? AND r.start_at <= ? AND r.end_at > ?
                  AND NOT EXISTS (SELECT 1 FROM reservation_cancellations n WHERE n.reservation_id = r.id)
+                 AND NOT EXISTS (SELECT 1 FROM simulation_reservations s WHERE s.reservation_id = r.id)
                ORDER BY r.start_at
               """,
             (room["id"], now + CHECKIN_OPENS_BEFORE, now),
@@ -138,6 +139,7 @@ def check_in(room: dict, employee_id: int, source_ip: str | None = None,
                      AND r.start_at < ?
                      AND NOT EXISTS (SELECT 1 FROM noshow_cancellations n WHERE n.reservation_id = r.id)
                      AND NOT EXISTS (SELECT 1 FROM reservation_cancellations n WHERE n.reservation_id = r.id)
+                 AND NOT EXISTS (SELECT 1 FROM simulation_reservations s WHERE s.reservation_id = r.id)
                    ORDER BY r.start_at""",
                 (employee_id, room["id"], now, tomorrow),
             ).fetchall()
@@ -155,6 +157,7 @@ def check_in(room: dict, employee_id: int, source_ip: str | None = None,
                      AND r.start_at < :tomorrow
                      AND NOT EXISTS (SELECT 1 FROM noshow_cancellations n WHERE n.reservation_id = r.id)
                      AND NOT EXISTS (SELECT 1 FROM reservation_cancellations n WHERE n.reservation_id = r.id)
+                 AND NOT EXISTS (SELECT 1 FROM simulation_reservations s WHERE s.reservation_id = r.id)
                    ORDER BY r.start_at LIMIT 1""",
                 {"opens_at": now + CHECKIN_OPENS_BEFORE, "now": now, "tomorrow": tomorrow, "emp": employee_id, "room": room["id"]},
             ).fetchone()
@@ -264,6 +267,7 @@ def process_noshows() -> list[dict]:
                  AND r.start_at <= ? AND r.end_at > ?
                  AND NOT EXISTS (SELECT 1 FROM noshow_cancellations n WHERE n.reservation_id = r.id)
                      AND NOT EXISTS (SELECT 1 FROM reservation_cancellations n WHERE n.reservation_id = r.id)
+                 AND NOT EXISTS (SELECT 1 FROM simulation_reservations s WHERE s.reservation_id = r.id)
                  AND NOT EXISTS (SELECT 1 FROM admin_blocks b WHERE b.reservation_id = r.id)
               """,
             (enforced_from, now - NOSHOW_GRACE, now),
@@ -312,6 +316,7 @@ def due_reminders() -> list[tuple[str, dict]]:
                      AND NOT EXISTS (SELECT 1 FROM checkins c WHERE c.reservation_id = r.id)
                      AND NOT EXISTS (SELECT 1 FROM noshow_cancellations n WHERE n.reservation_id = r.id)
                      AND NOT EXISTS (SELECT 1 FROM reservation_cancellations n WHERE n.reservation_id = r.id)
+                 AND NOT EXISTS (SELECT 1 FROM simulation_reservations s WHERE s.reservation_id = r.id)
                      AND NOT EXISTS (SELECT 1 FROM admin_blocks b WHERE b.reservation_id = r.id)
                    ON CONFLICT DO NOTHING
                    RETURNING reservation_id""",

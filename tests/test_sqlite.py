@@ -348,3 +348,40 @@ def test_image_only_host_signed_viewer_and_head(monkeypatch):
     params['e']=str(int(epoch.time())-1)
     params['s']=imgurl._sig('board',params)
     assert client.get('/img/board.png',params=params).status_code==404
+
+
+def test_simulation_excludes_owner_preserves_real_data_and_never_notifies():
+    from roombot import simulations
+    real = reservation(start=at(10),end=at(11))
+    info = simulations.seed_week([1],at().date(),days=7,per_room=2)
+    assert info['reservations'] > 0
+    with db.tx() as conn:
+        assert conn.execute('SELECT count(*) AS n FROM reservations WHERE id=?',(real,)).fetchone()['n']==1
+        assert conn.execute('SELECT count(*) AS n FROM reservation_attendees a JOIN simulation_reservations s ON s.reservation_id=a.reservation_id WHERE a.employee_id=1').fetchone()['n']==0
+        assert conn.execute('SELECT count(*) AS n FROM reservations r JOIN simulation_reservations s ON s.reservation_id=r.id WHERE r.organizer_id=1').fetchone()['n']==0
+        first = conn.execute('SELECT r.* FROM reservations r JOIN simulation_reservations s ON s.reservation_id=r.id ORDER BY start_at LIMIT 1').fetchone()
+    clock.freeze(first['start_at']-timedelta(minutes=10))
+    assert all(not r['is_simulated'] for _,r in checkin.due_reminders())
+    clock.freeze(first['start_at']+timedelta(minutes=10))
+    assert all(not r['is_simulated'] for r in checkin.process_noshows())
+    with db.tx() as conn:
+        row = conn.execute('SELECT * FROM v_reservations WHERE id=?',(first['id'],)).fetchone()
+        assert row['state']=='가상 일정'
+    assert rooms.stats()['total']<=1
+    assert simulations.clear_batch(info['batch'])==info['reservations']
+    with db.tx() as conn:
+        assert conn.execute('SELECT count(*) AS n FROM reservations WHERE id=?',(real,)).fetchone()['n']==1
+
+
+def test_sqlite_v1_upgrade_preserves_records():
+    path = db.database_path()
+    with db.tx(write=True) as conn:
+        conn.execute('DROP TABLE simulation_reservations')
+        conn.execute('DROP TABLE simulation_batches')
+        conn.execute('PRAGMA user_version=1')
+    db._ready.discard(path)
+    db.initialize()
+    with db.tx() as conn:
+        assert conn.execute('PRAGMA user_version').fetchone()['user_version']==2
+        assert conn.execute('SELECT count(*) AS n FROM employees').fetchone()['n']==3
+        assert conn.execute('SELECT count(*) AS n FROM simulation_batches').fetchone()['n']==0

@@ -78,8 +78,8 @@ def _grid(d, ax: _Axis, y0: float, y1: float, labels_y: float | None):
                 d.line([(xm, yy), (xm, min(yy + 5, y1))], fill=GRID, width=1)
         if labels_y is not None:
             t = f"{h:02d}:00"
-            w = d.textlength(t, font=font(22, "medium"))
-            d.text((x - w / 2, labels_y), t, fill=FAINT, font=font(22, "medium"))
+            w = d.textlength(t, font=font(28, "medium"))
+            d.text((x - w / 2, labels_y), t, fill=FAINT, font=font(28, "medium"))
 
 
 def _now_line(img, d, ax: _Axis, day: date, y0: float, y1: float, label: bool = True, label_y: float | None = None):
@@ -94,11 +94,11 @@ def _now_line(img, d, ax: _Axis, day: date, y0: float, y1: float, label: bool = 
     d.ellipse([x - 9, y0 - 15, x + 9, y0 + 3], fill=NOW)
     if label:
         t = f"지금 {now:%H:%M}"
-        f = font(22, "bold")
+        f = font(28, "bold")
         w = d.textlength(t, font=f)
         bx = min(max(x - w / 2 - 12, ax.x0), ax.x1 - w - 24)
-        ly = label_y if label_y is not None else y0 - 52
-        d.rounded_rectangle([bx, ly, bx + w + 24, ly + 32], radius=16, fill=NOW)
+        ly = label_y if label_y is not None else y0 - 60
+        d.rounded_rectangle([bx, ly, bx + w + 24, ly + 42], radius=20, fill=NOW)
         d.text((bx + 12, ly + 2), t, fill="#fff", font=f)
 
 
@@ -116,24 +116,24 @@ def _bar(d, x0, y0, x1, y1, state: str, title: str, sub: str = ""):
     if w < 64:      # 너무 짧은 막대는 글자 없이 (… 만 남는 것보다 깔끔)
         return
     h = y1 - y0
-    tf = font(24 if h >= 70 else 21, "bold")
+    tf = font(34 if h >= 100 else 28, "bold")
     t = _fit(d, title, tf, w)
     if sub and h >= 70:
-        d.text((x0 + 14, y0 + h / 2 - 28), t, fill=color, font=tf)
-        d.text((x0 + 14, y0 + h / 2 + 2), _fit(d, sub, font(20, "medium"), w), fill=color, font=font(20, "medium"))
+        d.text((x0 + 14, y0 + h / 2 - 38), t, fill=color, font=tf)
+        d.text((x0 + 14, y0 + h / 2 + 6), _fit(d, sub, font(28, "medium"), w), fill=color, font=font(28, "medium"))
     else:
-        d.text((x0 + 14, y0 + h / 2 - 13), t, fill=color, font=tf)
+        d.text((x0 + 14, y0 + h / 2 - 19), t, fill=color, font=tf)
 
 
 def _free(d, x0, y0, x1, y1, text: str = "예약없음"):
     d.rounded_rectangle([x0 + 2, y0, x1 - 2, y1], radius=min(14, (y1 - y0) / 2), fill=FREE_FILL, outline=FREE_LINE, width=2)
-    f = font(20, "semibold")
+    f = font(30, "semibold")
     if x1 - x0 - 24 > d.textlength(text, font=f):
-        d.text((x0 + 14, y0 + (y1 - y0) / 2 - 12), text, fill=FREE_TEXT, font=f)
+        d.text((x0 + 14, y0 + (y1 - y0) / 2 - 18), text, fill=FREE_TEXT, font=f)
 
 
 def _legend(d, x, y, items=LEGEND, with_free=True):
-    f = font(21, "medium")
+    f = font(28, "medium")
     for st, name in items:
         d.rounded_rectangle([x, y + 4, x + 26, y + 26], radius=7, fill=STATE_FILL[st],
                             outline=None, width=2)
@@ -152,27 +152,27 @@ def _legend(d, x, y, items=LEGEND, with_free=True):
 def room_day_png(room: dict, day: date) -> bytes:
     sched = rooms.room_schedule(room["id"], day)
     free = rooms.free_windows(sched, day) if sched else []
-    W, H = 1600, 410
+    W, H = 1600, 500 + len(sched) * 82
     img = Image.new("RGBA", (W, H), BG)
     d = ImageDraw.Draw(img)
 
     # 제목
-    d.text((48, 30), room["label"], fill=INK, font=font(36, "bold"))
+    d.text((48, 30), room["label"], fill=INK, font=font(46, "bold"))
     sub = f"{room['floor']}층 · {room['capacity']}인"
-    d.text((48, 80), sub, fill=MUTED, font=font(22, "medium"))
+    d.text((48, 80), sub, fill=MUTED, font=font(28, "medium"))
     wk = "월화수목금토일"[day.weekday()]
     dt = f"{day.month}월 {day.day}일 ({wk})"
-    f = font(26, "bold")
+    f = font(34, "bold")
     d.text((W - 48 - d.textlength(dt, font=f), 38), dt, fill=BRAND, font=f)
     live = [r for r in sched if r["state"] != "노쇼 취소"]
     fm = sum(int((b - a).total_seconds() // 60) for a, b in free)
     summ = f"예약 {len(live)}건 · 빈 시간 {fm // 60}시간 {fm % 60}분".replace(" 0분", "") if free else f"예약 {len(live)}건"
-    f2 = font(24, "medium")
+    f2 = font(30, "medium")
     d.text((W - 48 - d.textlength(summ, font=f2), 80), summ, fill=MUTED, font=f2)
 
     # 타임라인
     ax = _Axis(day, 70, W - 70)
-    y0, y1 = 160, 280
+    y0, y1 = 190, 330
     d.rounded_rectangle([ax.x0 - 14, y0 - 14, ax.x1 + 14, y1 + 14], radius=18, fill=CARD)
     _grid(d, ax, y0 - 6, y1 + 6, y1 + 26)
     for a, b in free:
@@ -186,7 +186,16 @@ def room_day_png(room: dict, day: date) -> bytes:
     if not sched:
         _free(d, ax.x0, y0 + 16, ax.x1, y1 - 16, "하루 종일 비어 있어요")
     _now_line(img, d, ax, day, y0 - 6, y1 + 6)
-    _legend(d, 70, H - 52)
+    # 짧은 타임라인 막대에서 잘린 회의명도 큰 글씨 목록에서 읽을 수 있게 한다.
+    for index, reservation in enumerate(sched):
+        yy = 410 + index * 82
+        when = f"{reservation['start_at'].astimezone(clock.TZ):%H:%M}–{reservation['end_at'].astimezone(clock.TZ):%H:%M}"
+        d.text((48, yy), when, fill=BRAND, font=font(32, "bold"))
+        d.text((300, yy), _fit(d, reservation['title'], font(32, "semibold"), W-348),
+               fill=INK, font=font(32, "semibold"))
+        detail = f"{reservation['organizer_name']} · {len(reservation['attendees'])}명"
+        d.text((300, yy+42), detail, fill=MUTED, font=font(26, "medium"))
+    _legend(d, 70, H - 62)
     return _png(img.convert("RGB"))
 
 
@@ -232,6 +241,19 @@ _SCHEDULE_PALETTE = {
 }
 
 
+def _title_lines(draw, text: str, face, max_width: float) -> list[str]:
+    """큰 회의명을 두 줄로 감싸고, 마지막 줄만 폭에 맞춰 줄인다."""
+    text = " ".join(text.split())
+    if draw.textlength(text, font=face) <= max_width:
+        return [text]
+    cut = 0
+    while cut < len(text) and draw.textlength(text[:cut+1], font=face) <= max_width:
+        cut += 1
+    if not cut:
+        return []
+    return [text[:cut].rstrip(), _fit(draw, text[cut:].lstrip(), face, max_width)]
+
+
 def _schedule_bar(canvas: _ScheduleCanvas, axis: _Axis, row_y: float, reservation: dict) -> None:
     start, end = reservation["start_at"], reservation["end_at"]
     if end <= start or not axis.visible(start, end):
@@ -240,23 +262,24 @@ def _schedule_bar(canvas: _ScheduleCanvas, axis: _Axis, row_y: float, reservatio
     width = x1 - x0
     fill, border, ink = _SCHEDULE_PALETTE.get(reservation["state"], _SCHEDULE_PALETTE["예정"])
     if width < 4:
-        canvas.line([(x0, row_y + 7), (x0, row_y + 35)], border, 1)
+        canvas.line([(x0, row_y + 7), (x0, row_y + 67)], border, 1)
         return
-    canvas.box((x0 + 1, row_y + 5, x1 - 1, row_y + 37), fill, radius=5, outline=border, width=.65)
-    available = width - 12
-    if available < 28:
+    canvas.box((x0 + 1, row_y + 5, x1 - 1, row_y + 69), fill, radius=6, outline=border, width=.8)
+    available = width - 14
+    if available < 22:
         return
-    # 짧은 예약도 회의명을 남기고, 넓은 막대에는 시작·종료 시각을 함께 표시.
-    if available < 62:
-        canvas.text(x0 + 6, row_y + 10, reservation["title"], size=11, fill=ink,
-                    weight="medium", max_width=available)
-        canvas.text(x0 + 6, row_y + 25, start.astimezone(clock.TZ).strftime("%H:%M"),
-                    size=9, fill=ink, max_width=available)
-        return
-    canvas.text(x0 + 6, row_y + 10, reservation["title"], size=11.5, fill=ink,
-                weight="semibold", max_width=available)
+    face = font(17 * canvas.scale, "semibold")
+    title = reservation["title"]
+    if reservation.get("is_simulated") and title.startswith("[가상] "):
+        title = title.removeprefix("[가상] ")
+    lines = _title_lines(canvas.draw, title, face, available * canvas.scale)
+    for index, line in enumerate(lines):
+        canvas.text(x0 + 7, row_y + 10 + index * 21, line, size=17, fill=ink, weight="semibold")
     when = f"{start.astimezone(clock.TZ):%H:%M}–{end.astimezone(clock.TZ):%H:%M}"
-    canvas.text(x0 + 6, row_y + 25, when, size=9, fill=ink, max_width=available)
+    time_face = font(14 * canvas.scale, "medium")
+    if canvas.draw.textlength(when, font=time_face) > available * canvas.scale:
+        when = start.astimezone(clock.TZ).strftime("%H:%M")
+    canvas.text(x0 + 7, row_y + 53, when, size=14, fill=ink, weight="medium", max_width=available)
 
 
 def board_png(day: date, only_floor: int | None = None) -> bytes:
@@ -265,32 +288,34 @@ def board_png(day: date, only_floor: int | None = None) -> bytes:
                        key=lambda r: (r["floor"], r["id"]))
     schedules = rooms.room_schedules([r["id"] for r in all_rooms], day, include_attendees=False)
     floors = sorted({r["floor"] for r in all_rooms})
-    width, pad, label_width = 1200, 28, 190
-    top, floor_header, row_height, floor_gap, bottom = 148, 30, 42, 14, 42
+    width, pad, label_width = 1200, 28, 230
+    top, floor_header, row_height, floor_gap, bottom = 180, 42, 74, 18, 54
     height = top + len(floors) * (floor_header + floor_gap) + len(all_rooms) * row_height + bottom
     if not all_rooms:
         height += 64
     canvas = _ScheduleCanvas(width, height)
     now = clock.now()
     title = "전체 회의실 일정" if only_floor is None else f"{only_floor}층 회의실 일정"
-    canvas.text(pad, 26, title, size=23, weight="bold")
+    canvas.text(pad, 24, title, size=32, weight="bold")
     total = sum(len(rs) for rs in schedules.values())
-    canvas.text(pad, 59, f"{len(all_rooms)}개 회의실  ·  예약 {total}건  ·  09:00–18:00", size=12, fill=MUTED)
+    simulated = sum(bool(r.get("is_simulated")) for reservations in schedules.values() for r in reservations)
+    virtual_note = f" (가상 {simulated}건)" if simulated else ""
+    canvas.text(pad, 68, f"{len(all_rooms)}개 회의실  ·  예약 {total}건{virtual_note}  ·  09:00–18:00", size=17, fill=MUTED)
     day_label = f"{day:%Y.%m.%d}  {'월화수목금토일'[day.weekday()]}요일"
-    canvas.text(width - pad, 29, day_label, size=15, weight="semibold", anchor="rt")
+    canvas.text(width - pad, 29, day_label, size=20, weight="semibold", anchor="rt")
     if day == now.date():
-        canvas.text(width - pad, 60, f"{now:%H:%M} 기준", size=12, fill=BRAND, anchor="rt")
+        canvas.text(width - pad, 69, f"{now:%H:%M} 기준", size=17, fill=BRAND, anchor="rt")
 
     # 상태 이름을 모두 적어 색의 의미를 설명. 빈 시간은 흰 바탕으로 남김.
     x = pad
     for state in ("예정", "체크인 대기", "사용중", "종료"):
         fill, border, ink = _SCHEDULE_PALETTE[state]
-        canvas.box((x, 94, x + 12, 106), fill, radius=3, outline=border)
-        canvas.text(x + 19, 94, state, size=11, fill=MUTED)
-        x += 116 if state == "체크인 대기" else 88
-    canvas.box((x, 94, x + 12, 106), "#ffffff", radius=3, outline="#c7cdd8")
-    canvas.text(x + 19, 94, "예약 없음", size=11, fill=MUTED)
-    canvas.line([(pad, 124), (width - pad, 124)], "#dde1eb")
+        canvas.box((x, 113, x + 16, 129), fill, radius=3, outline=border)
+        canvas.text(x + 24, 112, state, size=16, fill=MUTED)
+        x += 154 if state == "체크인 대기" else 112
+    canvas.box((x, 113, x + 16, 129), "#ffffff", radius=3, outline="#c7cdd8")
+    canvas.text(x + 24, 112, "예약 없음", size=16, fill=MUTED)
+    canvas.line([(pad, 153), (width - pad, 153)], "#dde1eb")
 
     axis = _Axis(day, pad + label_width, width - pad - 12)
     show_now = day == now.date() and axis.start <= now <= axis.end
@@ -300,17 +325,17 @@ def board_png(day: date, only_floor: int | None = None) -> bytes:
         end_y = y + floor_header + len(floor_rooms) * row_height
         canvas.box((pad - 8, y - 5, width - pad + 8, end_y + 2), "#ffffff", radius=10, outline="#e2e6ee")
         canvas.box((pad - 7, y - 4, width - pad + 7, y + floor_header), "#f0edf7", radius=8)
-        canvas.text(pad + 8, y + 5, f"{floor}층", size=13, fill=BRAND, weight="bold")
-        canvas.text(pad + 49, y + 7, f"{len(floor_rooms)}개 회의실", size=10, fill=MUTED)
+        canvas.text(pad + 8, y + 9, f"{floor}층", size=19, fill=BRAND, weight="bold")
+        canvas.text(pad + 67, y + 12, f"{len(floor_rooms)}개 회의실", size=14, fill=MUTED)
         for hour in range(OPEN_H, CLOSE_H + 1):
             xx = axis.x(axis.start + timedelta(hours=hour - OPEN_H))
-            canvas.text(xx, y + 7, f"{hour:02d}:00", size=10, fill="#626b7c", anchor="mt")
+            canvas.text(xx, y + 12, f"{hour:02d}:00", size=14, fill="#626b7c", anchor="mt")
         row_y = y + floor_header
         for index, room in enumerate(floor_rooms):
             if index % 2:
                 canvas.box((pad - 6, row_y, width - pad + 6, row_y + row_height), "#fafbfe")
-            canvas.text(pad + 10, row_y + 14, room["name"], size=13, weight="semibold", max_width=126)
-            canvas.text(axis.x0 - 15, row_y + 15, f"{room['capacity']}인", size=10, fill=MUTED, anchor="rt")
+            canvas.text(pad + 10, row_y + 26, room["name"], size=20, weight="semibold", max_width=164)
+            canvas.text(axis.x0 - 15, row_y + 29, f"{room['capacity']}인", size=14, fill=MUTED, anchor="rt")
             # 시간선은 행 바탕 위, 예약 막대 아래에 그려 가려지지 않게 유지.
             for half_hour in range((CLOSE_H - OPEN_H) * 2 + 1):
                 xx = axis.x(axis.start + timedelta(minutes=30 * half_hour))
@@ -329,7 +354,7 @@ def board_png(day: date, only_floor: int | None = None) -> bytes:
         y = end_y + floor_gap
     if not all_rooms:
         canvas.text(pad, y + 18, "표시할 회의실이 없습니다.", size=14, fill=MUTED)
-    canvas.text(pad, height - 24, "빈 구간은 예약 없음 · 회의실 메뉴에서 상세 일정 확인", size=10, fill=MUTED)
+    canvas.text(pad, height - 32, "빈 구간은 예약 없음 · 회의실 메뉴에서 상세 일정 확인", size=14, fill=MUTED)
     if show_now:
-        canvas.text(width - pad, height - 24, f"빨간 선: 현재 {now:%H:%M}", size=10, fill="#b92f44", anchor="rt")
+        canvas.text(width - pad, height - 32, f"빨간 선: 현재 {now:%H:%M}", size=14, fill="#b92f44", anchor="rt")
     return _png(canvas.img)
