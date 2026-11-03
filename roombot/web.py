@@ -137,8 +137,8 @@ def _page(kind: str, title: str, rows: list[tuple[str, str]] = (), note: str = "
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>{html.escape(title)} · 회의실봇</title>
 <style>
-  :root {{ color-scheme: light dark; --fg:#16171a; --bg:#f4f2f7; --card:#fff; --muted:#62636c; --line:#ebe8f0; }}
-  @media (prefers-color-scheme: dark) {{ :root {{ --fg:#ededf0; --bg:#141217; --card:#1f1c24; --muted:#a5a3ad; --line:#2e2a35; }}
+  :root {{ color-scheme: light dark; --fg:#16171a; --bg:#f4f2f7; --card:#fff; --muted:#62636c; --line:#ebe8f0; --title:{title_color}; }}
+  @media (prefers-color-scheme: dark) {{ :root {{ --fg:#ededf0; --bg:#141217; --card:#1f1c24; --muted:#a5a3ad; --line:#2e2a35; --title:{icons.COLORS.get(kind, icons.COLORS['info'])[1]}; }}
     .badge {{ filter:brightness(.92) saturate(1.1); }} }}
   * {{ box-sizing:border-box; }}
   body {{ margin:0; font:14px/1.5 -apple-system,"Apple SD Gothic Neo","Pretendard",sans-serif; background:var(--bg); color:var(--fg);
@@ -149,7 +149,7 @@ def _page(kind: str, title: str, rows: list[tuple[str, str]] = (), note: str = "
   .card {{ background:var(--card); border-radius:14px; padding:20px 16px 16px; box-shadow:0 1px 2px rgba(20,10,30,.06), 0 8px 24px rgba(20,10,30,.06); }}
   .badge {{ width:52px; height:52px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto; }}
   .badge svg {{ width:30px; height:30px; }}
-  h1 {{ text-align:center; font-size:19px; letter-spacing:-.3px; margin:10px 0 14px; color:{title_color}; }}
+  h1 {{ text-align:center; font-size:19px; letter-spacing:-.3px; margin:10px 0 14px; color:var(--title); }}
   .lead {{ margin:-4px 0 12px; padding:10px 12px; border-radius:10px; background:{icons.COLORS.get(kind, icons.COLORS["info"])[1]};
            color:{title_color}; font-weight:600; font-size:14px; line-height:1.5; text-align:center; word-break:keep-all; }}
   table {{ width:100%; border-collapse:collapse; font-size:14px; }}
