@@ -1,4 +1,4 @@
-"""슬랙봇: /룸(/room) 명령어, 버튼·메뉴, 빈 회의실 찾기 창, 앱 홈 대시보드 (Socket Mode라 공개 서버 주소 없이 동작)."""
+"""슬랙봇: /룸(/room) 명령어, 버튼·메뉴, 미팅룸 창, 앱 홈 대시보드 (Socket Mode라 공개 서버 주소 없이 동작)."""
 
 import json
 import logging
@@ -10,8 +10,8 @@ from datetime import date, datetime, time, timedelta
 from slack_bolt import App
 from slack_sdk.errors import SlackApiError
 
-from roombot import clock, commands, imgurl, rooms, style
-from roombot.blocks import Reply, actions, button, context, divider, header, image, section
+from roombot import clock, commands, rooms, style
+from roombot.blocks import Reply, actions, button, context, divider, header, section
 from roombot.config import settings
 
 log = logging.getLogger(__name__)
@@ -94,7 +94,7 @@ def _parse_room_value(value: str) -> tuple[dict | None, date]:
 
 
 # ---------------------------------------------------------------
-# 빈 회의실 찾기 창
+# 미팅룸 창
 # ---------------------------------------------------------------
 
 def finder_view(initial: datetime | None = None, minutes: int = 60, notice: str = "") -> dict:
@@ -125,7 +125,6 @@ def finder_view(initial: datetime | None = None, minutes: int = 60, notice: str 
          "accessory": {"type": "static_select", "action_id": "finder_dur",
                      "options": [opt(*o) for o in dur_opts],
                      "initial_option": opt(*next(o for o in dur_opts if o[1]==str(minutes)))}},
-        context("조건을 바꾸면 바로 갱신돼요. 회의실의 빈 시간도 아래에서 함께 확인하세요."),
     ]
     if notice:
         blocks.append(section(notice))
@@ -136,20 +135,15 @@ def finder_view(initial: datetime | None = None, minutes: int = 60, notice: str 
         blocks.append(section("사용 시간이 18시를 넘어요. 시작이나 사용 시간을 바꿔 주세요."))
     else:
         found = rooms.free_rooms(start,end)
-        blocks.extend([divider(),context(f"*{commands.span(start,end)} · 빈방 {len(found)}곳*")])
-        schedules = rooms.room_schedules([r['id'] for r in found],start.date(),include_attendees=False)
+        blocks.extend([divider(),context(f"*{commands.span(start,end)} · 예약 가능 {len(found)}곳*")])
         for room in found[:40]:
-            windows = rooms.free_windows(schedules[room['id']],start.date())
-            free_text = " · ".join(commands.span(lo,hi) for lo,hi in windows[:3])
-            if len(windows)>3:
-                free_text += f" 외 {len(windows)-3}구간"
             value=json.dumps({'room':room['id'],'start':start.isoformat(),'minutes':minutes},separators=(',',':'))
-            blocks.append(section(f"*{room['label']}*\n빈 시간 {free_text or commands.span(start,end)}",
+            blocks.append(section(f"*{room['label']}* · {room['capacity']}인",
                                   accessory=button("예약",f"book_room:{room['id']}",value)))
         if not found:
-            blocks.append(section("이 시간에 빈 회의실이 없어요. 위에서 시간을 바꿔 주세요."))
+            blocks.append(section("예약 가능한 미팅룸이 없어요. 시간을 바꿔 주세요."))
     return {"type":"modal","callback_id":FINDER_ID,
-            "title":{"type":"plain_text","text":"빈방 찾기"},
+            "title":{"type":"plain_text","text":"미팅룸"},
             "close":{"type":"plain_text","text":"닫기"},"blocks":[b for b in blocks if b]}
 
 
@@ -186,20 +180,13 @@ def home_view(employee: dict | None) -> dict:
     blocks: list[dict] = [
         header("회의실봇"),
         context(f"{style.DATE} *{commands.fmt_day(now.date())} {commands.hm(now)}* 기준   지금 비어 있는 회의실 *{free_now}곳*"),
-        actions(button("빈방 찾기", "open_finder", style="primary"),
-                button("내 예약", "show_my"), button("전체 현황", "show_now"),
-                button("통계", "show_stats"), button("새로고침", "refresh_home")),
+        actions(button("미팅룸", "open_finder", style="primary"),
+                button("전체 일정", "show_now"), button("내 예약", "show_my")),
     ]
     if employee:
-        blocks += [context(f"{style.PERSON} *{employee['name']}*님 · {employee['department']}")]
         blocks += commands.next_meeting_block(employee)
     else:
         blocks += commands._not_linked().blocks
-    blocks += [context("*층별 현황* · 전체 현황에서 회의별 상세 조회"),
-               commands.floor_summary(rows),
-               actions(commands.room_menu(now.date())),
-               context("QR 체크인: 시작 10분 전~10분 후 · 미체크인 시 자동 취소"),
-               context("`/룸` 도움말 · `/룸 BTC` 일정 · `/룸 22층` 층별 현황")]
     return {"type": "home", "blocks": [b for b in blocks if b][:100]}
 
 
@@ -247,7 +234,7 @@ def build_app() -> App:
             return
         if reply.open_finder:
             reply = Reply().add(section("아래 버튼으로 찾기 창을 열어주세요."),
-                                actions(button(f"{style.FIND} 빈 회의실 찾기", "open_finder", style="primary")))
+                                actions(button("미팅룸", "open_finder", style="primary")))
         say(**reply.slack())
 
     # ----- 버튼 / 메뉴 -----
@@ -281,12 +268,23 @@ def build_app() -> App:
         if room:
             show(body, client, respond, lambda sf: commands.schedule_reply(room, day, sf), room["label"], replace=True)
 
+    @app.action(re.compile(r"^schedule_date:"))
+    def schedule_date(ack, body, client, respond):
+        ack()
+        action = body['actions'][0]
+        code = action['action_id'].split(':', 1)[1]
+        if not action.get('selected_date'):
+            return
+        room, day = _parse_room_value(f"{code}|{action['selected_date']}")
+        if room:
+            show(body, client, respond, lambda sf: commands.schedule_reply(room, day, sf), room['label'], replace=True)
+
     @app.action(re.compile(r"^free_at(:|$)"))
     def free_at(ack, body, client, respond):
         ack()
         iso, minutes, cap = body["actions"][0]["value"].split("|")
         start, dur = datetime.fromisoformat(iso), timedelta(minutes=int(minutes))
-        show(body, client, respond, lambda sf: commands.free_search(start, dur, int(cap), sf), "빈 회의실")
+        show(body, client, respond, lambda sf: commands.free_search(start, dur, int(cap), sf), "미팅룸")
 
     # ----- 회의실 채널의 체크인 패널 -----
 

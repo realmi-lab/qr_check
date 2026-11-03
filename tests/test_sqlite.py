@@ -293,6 +293,12 @@ def test_finder_and_booking_handlers_without_slack_network(monkeypatch):
         assert conn.execute('SELECT title FROM reservations').fetchone()['title']=='앱 예약'
     handlers['booking_submit'](lambda **data:answers.append(data),{'user':{'id':'U1'}},form,client)
     assert answers[-1]['response_action']=='errors'
+    handlers['schedule_date'](lambda:None,{
+        'container':{'type':'view'},'view':{'type':'modal','id':'S1'},
+        'actions':[{'action_id':'schedule_date:9A','selected_date':'2026-11-05'}]},client,lambda **data:None)
+    assert calls[-1]['view_id']=='S1'
+    picker=calls[-1]['view']['blocks'][0]['accessory']
+    assert picker['type']=='datepicker' and picker['initial_date']=='2026-11-05'
 
 
 def test_small_wrapped_layouts_have_no_horizontal_tables(monkeypatch):
@@ -306,10 +312,19 @@ def test_small_wrapped_layouts_have_no_horizontal_tables(monkeypatch):
         assert not any(block['type']=='table' for block in reply.blocks)
         assert len(reply.blocks)<50
     status=commands.status_reply()
-    assert any('9A' in str(block) and block['type']=='context' for block in status.blocks)
-    assert any(element.get('url','').startswith('https://images.example.test/view/')
-               for block in status.blocks for element in block.get('elements',[]) if block['type']=='actions')
-    assert not any(block['type']=='table' for block in home_view(rooms.employee_by_id(1))['blocks'])
+    assert len(status.blocks)==4
+    assert sum(block['type']=='image' for block in status.blocks)==1
+    for reply in replies[:2]:
+        assert not any(element.get('url') for block in reply.blocks for element in block.get('elements',[]))
+        assert '크게 보기' not in str(reply.blocks)
+    home=home_view(rooms.employee_by_id(1))
+    labels=[element['text']['text'] for block in home['blocks'] if block['type']=='actions'
+            for element in block['elements']]
+    assert labels==['미팅룸','전체 일정','내 예약']
+    assert commands.handle('미팅룸',rooms.employee_by_id(1)).open_finder
+    monkeypatch.setattr(settings,'image_base_url','')
+    monkeypatch.setattr(settings,'public_base_url','http://localhost:8000')
+    assert any('9A' in str(block) and block['type']=='context' for block in commands.status_reply().blocks)
 
 
 def test_image_source_never_uses_unshared_bot_files(monkeypatch):

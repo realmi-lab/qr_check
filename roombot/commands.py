@@ -5,8 +5,8 @@
   /룸 now | 현황                  지금 전체 회의실 현황 (층별 표)
   /룸 22층 [날짜]                 한 층의 현황 / 그 날 회의실별 빈 시간
   /룸 <회의실> [날짜]              회의실 하루 일정표 (예: /룸 BTC 내일, /룸 9A 10/20)
-  /룸 free [날짜] [시각] [길이] [인원]   빈 회의실 찾기 (예: /룸 free 10/20 14:00 1h 6명)
-  /룸 찾기                        빈 회의실 찾기 창 열기
+  /룸 free [날짜] [시각] [길이] [인원]   미팅룸 (예: /룸 free 10/20 14:00 1h 6명)
+  /룸 찾기                        미팅룸 창 열기
   /룸 my | 내예약                 내 예약과 체크인 상태
   /룸 통계                        최근 7일 체크인·노쇼 통계
 """
@@ -98,8 +98,8 @@ def quick_actions(*, finder: bool = True, my: bool = True, now: bool = True, sta
                   menu_day: date | None = None) -> dict | None:
     return actions(
         room_menu(menu_day) if menu_day else None,
-        button("빈방 찾기", "open_finder", style="primary") if finder else None,
-        button("전체 현황", "show_now") if now else None,
+        button("미팅룸", "open_finder", style="primary") if finder else None,
+        button("전체 일정", "show_now") if now else None,
         button("내 예약", "show_my") if my else None,
         button("통계", "show_stats") if stats else None,
     )
@@ -172,8 +172,8 @@ def handle(text: str, employee: dict | None, slack_user_id: str | None = None) -
         return status_reply()
     if cmd in ("free", "빈방", "빈회의실", "빈"):
         return free_reply(args)
-    if cmd in ("찾기", "find", "search"):
-        return free_reply(args) if args else Reply(open_finder=True, fallback="빈 회의실 찾기")
+    if cmd in ("미팅룸", "찾기", "find", "search"):
+        return free_reply(args) if args else Reply(open_finder=True, fallback="미팅룸")
     if cmd in ("my", "내예약", "내", "me"):
         return my_reply(employee)
     if cmd in ("통계", "stats", "노쇼"):
@@ -232,7 +232,7 @@ def help_reply() -> Reply:
         section("", fields=[
             "*지금 현황*\n`/룸 지금`\n`/룸 22층`",
             "*회의실 일정표*\n`/룸 9A`\n`/룸 BTC 내일`",
-            "*빈 회의실 찾기*\n`/룸 빈방 오후 2시 1시간 6명`\n`/룸 찾기` (창에서 고르기)",
+            "*미팅룸*\n`/룸 미팅룸 오후 2시 1시간 6명`\n`/룸 찾기` (창에서 고르기)",
             "*내 예약 · 통계*\n`/룸 내예약`\n`/룸 통계`",
         ]),
         section("*예약 등록·변경*\n`/룸 예약 9A 내일 14:00 1h 회의제목`\n`/룸 참석자 예약번호 사번` · `/룸 취소 예약번호`"),
@@ -319,7 +319,7 @@ def floor_summary(rows: list[dict]) -> dict:
         using=sum(r['state']=='사용중' for r in group)
         waiting=sum(r['state'] in ('체크인 대기','노쇼 처리 대기','곧 시작') for r in group)
         free=sum(r['state']=='비어있음' for r in group)
-        lines.append(f"*{floor}층* · 사용 {using} · 대기 {waiting} · 빈방 {free}")
+        lines.append(f"*{floor}층* · 사용 {using} · 대기 {waiting} · 여유 {free}")
     return context("\n".join(lines))
 
 
@@ -332,19 +332,15 @@ def status_reply(only_floor: int | None = None, surface: str = "message") -> Rep
     chart_title = f"{only_floor}층 회의실 일정" if only_floor is not None else "전체 회의실 일정"
     free_now = sum(1 for r in rows if r["state"] == "비어있음")
     reply = Reply(fallback=f"회의실 현황 {fmt_day(now.date())} {hm(now)} · 비어있음 {free_now}곳")
-    large_view = imgurl.viewer("board", d=now.date().isoformat(), f=only_floor)
+    chart = imgurl.src("board", chart_title, d=now.date().isoformat(), f=only_floor)
     reply.add(header(title),
               context(f"{style.DATE} *{fmt_day(now.date())} {hm(now)}* 기준", status_counts(rows)),
-              image(imgurl.src("board", chart_title, d=now.date().isoformat(), f=only_floor),
+              image(chart,
                     f"{chart_title} — 09:00–18:00, 회의명·예약 시간·상태"),
-              actions(room_menu(now.date()), button("빈방 찾기", "open_finder", style="primary"),
-                      button("크게 보기", "view_board", url=large_view) if large_view else None))
-    if surface == "modal":
-        reply.add(divider(), *floor_sections(rows, now.date()))
-    else:
+              actions(room_menu(now.date()), button("미팅룸", "open_finder", style="primary"),
+                      button("내 예약", "show_my")))
+    if not chart:
         reply.add(*status_tables(rows, now.date()))
-    reply.add(context("상태 표시   " + style.legend("사용중", "체크인 대기", "노쇼 처리 대기", "곧 시작", "비어있음")),
-              quick_actions(finder=False, now=False))
     return reply
 
 
@@ -398,8 +394,8 @@ def floor_day_reply(floor: int, day: date) -> Reply:
         free_txt = "  ·  ".join(bspan(a, b) for a, b in free) if free else "_남은 빈 시간 없음_"
         reply.add(section(f"{style.ROOM} *{room['label']}*  ·  {room['capacity']}인  ·  예약 {len(live)}건\n"
                           f"{icon('비어있음')} {free_txt}",
-                          accessory=button("일정표", f"room_schedule:{room['code']}", room_value(room["code"], day))))
-    reply.add(actions(button(f"{style.FIND} 빈 회의실 찾기", "open_finder", style="primary")))
+                          accessory=button("일정", f"room_schedule:{room['code']}", room_value(room["code"], day))))
+    reply.add(actions(button("미팅룸", "open_finder", style="primary")))
     return reply
 
 
@@ -431,59 +427,35 @@ def _schedule_rows(sched: list[dict], free: list[tuple[datetime, datetime]]) -> 
 
 
 def schedule_tables(sched: list[dict], free: list[tuple[datetime, datetime]]) -> list[dict]:
-    """[시간 | 상태 | 회의 | 예약자 · 참석자] 표를 13시 이전·이후로 나눔. 빈 시간도 시간 순서대로."""
-    parts = [("13시 이전", 13), ("13시 이후", 24)]
-    groups = [(title, []) for title, _ in parts]
+    """이미지를 쓸 수 없을 때 시간과 회의명만 표시한다."""
+    from html import escape
+    out = []
     for _, kind, r in _schedule_rows(sched, free):
-        idx = next(i for i, (_, end_h) in enumerate(parts) if r["start_at"].hour < end_h)
-        when = rt((span(r["start_at"], r["end_at"]), B))
         if kind == "free":
-            groups[idx][1].append([when, rt(style.badge("비어있음")), rt(""), rt("")])
+            out.append(context(f"{span(r['start_at'], r['end_at'])} · 빈 시간"))
             continue
-        note = _status_note(r)
-        state = _state_cell(r, note)
-        others = [a["name"] for a in r["attendees"] if a["name"] != r["organizer_name"]]
-        guests = ", ".join(others[:6]) + (f" 외 {len(others) - 6}명" if len(others) > 6 else "")
-        title = (f"#{r['id']} {r['title']}", B)
-        groups[idx][1].append([when, rt(state), rt(title),
-                               rt((r["organizer_name"], B), (f", {guests}" if guests else ""),
-                                  (f"  ({len(r['attendees'])}명)", I))])
-    return tables(["시간", "상태", "회의", "예약자 · 참석자"], groups, wrap=[False, True, True, True])
+        out.append(context(f"*{span(r['start_at'], r['end_at'])}* · {escape(r['title'])}\n"
+                           f"#{r['id']} · {style.label(r['state'])}"))
+    return out
 
 
 def schedule_reply(room: dict, day: date, surface: str = "message") -> Reply:
-    """회의실 하루 일정: 위에 타임라인 그림, 아래에 표 (창에서는 2칸 목록)."""
+    """회의실 일정 이미지와 날짜 선택, 회의실 선택만 표시한다."""
     sched = rooms.room_schedule(room["id"], day)
-    today = clock.now().date()
     off = rooms.is_holiday(day)
     free = rooms.free_windows(sched, day) if sched else []
     live = [r for r in sched if r["state"] != "노쇼 취소"]
-    free_min = sum(int((b - a).total_seconds() // 60) for a, b in free)
-    free_total = f"{free_min // 60}시간" + (f" {free_min % 60}분" if free_min % 60 else "") if free_min >= 60 else f"{free_min}분"
-
-    meta = f"{style.PEOPLE} {room['capacity']}인   {style.DATE} *{fmt_day(day)}*" + (f" {off}" if off else "")
-    summary = f"예약 *{len(live)}건*" + (f"   빈 시간 *{len(free)}곳* (총 {free_total})" if free else "")
     reply = Reply(fallback=f"{room['label']} {fmt_day(day)} 일정 {len(live)}건")
-    reply.add(header(f"{room['label']}"), context(meta, summary),
-              image(imgurl.src("room", f"{room['label']} 타임라인", r=room["code"], d=day.isoformat()), f"{room['label']} {fmt_day(day)} 타임라인"))
-
-    if not sched:
-        reply.add(section(f"{icon('비어있음')} 이 날은 예약이 없어요. *09:00–18:00* 모두 비어 있어요."))
-    else:
+    chart = imgurl.src("room", r=room["code"], d=day.isoformat())
+    reply.add(section(f"*{room['label']}* · {room['capacity']}인" + (f" · {off}" if off else ""),
+                      accessory={"type":"datepicker", "action_id":f"schedule_date:{room['code']}",
+                                 "initial_date":day.isoformat()}),
+              image(chart, f"{room['label']} {fmt_day(day)} 일정"))
+    if not chart and sched:
         reply.add(*schedule_tables(sched, free))
-    if sched and day >= today and not free:
-        reply.add(context("남은 빈 시간이 없어요."))
-
-    prev_d, next_d = day - timedelta(days=1), day + timedelta(days=1)
-    large_view = imgurl.viewer("room", r=room["code"], d=day.isoformat())
-    reply.add(actions(
-        button(f"◀ {fmt_day(prev_d)}", "day_nav:prev", room_value(room["code"], prev_d)),
-        button("오늘", "day_nav:today", room_value(room["code"], today)) if day != today else None,
-        button(f"{fmt_day(next_d)} ▶", "day_nav:next", room_value(room["code"], next_d)),
-        button("빈방 찾기", "open_finder"),
-        button("크게 보기", "view_room", url=large_view) if large_view else None,
-        room_menu(day, action_id="room_switch"),   # 같은 날짜의 다른 회의실 일정으로 바꿔 보기
-    ))
+    elif not chart:
+        reply.add(context("예약 없음 · 09:00–18:00"))
+    reply.add(actions(room_menu(day, action_id="room_switch"), button("미팅룸", "open_finder")))
     return reply
 
 
@@ -515,8 +487,8 @@ def free_reply(args: list[str]) -> Reply:
         else:
             return Reply(fallback="입력을 이해하지 못했어요").add(
                 section(f"🤔 *'{a}'*을(를) 이해하지 못했어요."),
-                context("예: `/룸 빈방 10/20 오후 2시 1시간 6명` · `/룸 빈방 15시 30분`"),
-                actions(button("🔍 창에서 골라 찾기", "open_finder", style="primary")))
+                context("예: `/룸 미팅룸 10/20 오후 2시 1시간 6명` · `/룸 미팅룸 15시 30분`"),
+                actions(button("미팅룸", "open_finder", style="primary")))
 
     if start_t is not None and pm is not None:
         if pm and start_t.hour < 12:
@@ -534,8 +506,8 @@ def free_search(start: datetime, dur: timedelta, cap: int = 1, surface: str = "m
     end = start + dur
     found = rooms.free_rooms(start, end, cap)
     cond = f"{style.DATE} *{fmt_day(start.date())} {span(start, end)}*" + (f"   {style.PEOPLE} {cap}인 이상" if cap > 1 else "")
-    reply = Reply(fallback=f"빈 회의실 {len(found)}곳 — {fmt_day(start.date())} {span(start, end)}")
-    reply.add(header("빈 회의실"),
+    reply = Reply(fallback=f"미팅룸 {len(found)}곳 — {fmt_day(start.date())} {span(start, end)}")
+    reply.add(header("미팅룸"),
               context(cond, f"*{len(found)}곳* 비어 있어요" if found else "비어 있는 곳이 없어요"))
     if start < clock.now() - timedelta(minutes=1):
         reply.add(context(f"{style.WARN} 이미 지난 시간이에요."))
@@ -551,14 +523,14 @@ def free_search(start: datetime, dur: timedelta, cap: int = 1, surface: str = "m
                 for r in found if r["floor"] == fl]))
         reply.add(*tables(["회의실", "인원", "다음 예약"], groups,
                           wrap=[False, False, False], align=["left", "right", "left"]),
-                  actions(select(f"{style.ROOM} 일정표 보기", "room_pick",
+                  actions(select(f"{style.ROOM} 회의실 선택", "room_pick",
                                  [(f"{r['label']} · {r['capacity']}인", room_value(r["code"], start.date())) for r in found[:100]])))
     else:
         for r in found[:20]:
             nxt = r["next_start_at"]
             tail = f"다음 예약 *{hm(nxt)}*" if nxt and nxt.date() == start.date() else "_이후 예약 없음_"
             reply.add(section(f"{icon('비어있음')} *{r['label']}*  ·  {r['capacity']}인\n{tail}",
-                              accessory=button("일정표", f"room_schedule:{r['code']}", room_value(r["code"], start.date()))))
+                              accessory=button("일정", f"room_schedule:{r['code']}", room_value(r["code"], start.date()))))
         if len(found) > 20:
             reply.add(context(f"외 {len(found) - 20}곳"))
 
@@ -616,7 +588,7 @@ def next_meeting_block(employee: dict) -> list[dict]:
     return [section(f"*다음 회의*   {bspan(r['start_at'], r['end_at'])}   *{clip(r['title'], TITLE_MID)}*\n"
                     f"{style.ROOM} {r['room_name']}  ·  {'예약자' if r['i_am_organizer'] else '참석'}\n"
                     f"{_checkin_hint(r, now)}{more}",
-                    accessory=button("일정표", "room_schedule", room_value(r["room_code"], r["start_at"].date())))]
+                    accessory=button("일정", "room_schedule", room_value(r["room_code"], r["start_at"].date())))]
 
 
 def my_reply(employee: dict | None, surface: str = "message") -> Reply:
@@ -624,25 +596,23 @@ def my_reply(employee: dict | None, surface: str = "message") -> Reply:
         return _not_linked()
     rows = rooms.my_reservations(employee["id"])
     reply = Reply(fallback=f"{employee['name']}님의 예약 {len(rows)}건")
-    reply.add(header(f"{employee['name']}님의 예약"),
-              context(f"{employee['department']}   오늘부터 7일   *{len(rows)}건*"))
+    reply.add(header("내 예약"), context(f"오늘부터 7일 · {len(rows)}건"))
     if not rows:
-        return reply.add(section("예약이 없어요.\n`/룸 예약 9A 내일 14:00 1h 회의제목`으로 등록해 주세요."), quick_actions(my=False))
-    by_day: dict[date, list] = {}
+        return reply.add(context("예약이 없어요."), quick_actions(my=False))
+    from html import escape
+    last_day = None
     for r in rows:
-        note = _status_note(r) if r["state"] != "종료" else ""
-        st = _state_cell(r, note)
-        if r["i_checked_in"]:
-            st += f"\n{style.OK} 내가 체크인"
-        t = f"#{r['id']} " + clip(r["title"], TITLE_MID)
-        title = (t, S) if r["state"] == "노쇼 취소" else (t, B)
-        by_day.setdefault(r["start_at"].date(), []).append(
-            [rt((span(r["start_at"], r["end_at"]), B)), rt(title), rt(r["room_name"]),
-             rt("예약자" if r["i_am_organizer"] else "참석"), rt(st)])
-    reply.add(*tables(["시간", "회의", "회의실", "역할", "상태"],
-                      [(f"{style.DATE} {fmt_day(d)}", rs) for d, rs in by_day.items()],
-                      wrap=[False, True, False, False, True])[:44],
-              quick_actions(my=False))
+        if len(reply.blocks) >= 44:
+            reply.add(context("더 많은 예약은 회의실 일정에서 확인하세요."))
+            break
+        day = r['start_at'].date()
+        if day != last_day:
+            reply.add(context(f"*{fmt_day(day)}*"))
+            last_day = day
+        state = f" · {style.label(r['state'])}" if r['state'] != '예정' else ''
+        reply.add(context(f"*{span(r['start_at'], r['end_at'])}* · {escape(r['room_name'])}\n"
+                          f"{escape(r['title'])} · #{r['id']}{state}"))
+    reply.add(quick_actions(my=False))
     return reply
 
 
