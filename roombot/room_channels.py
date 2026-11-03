@@ -36,7 +36,7 @@ def channel_name(room: dict) -> str:
 
 def mapping() -> dict[int, dict]:
     with tx() as conn:
-        return {r["room_id"]: r for r in conn.execute("SELECT * FROM bot.room_channels").fetchall()}
+        return {r["room_id"]: r for r in conn.execute("SELECT * FROM room_channels").fetchall()}
 
 
 _workspace_url: str | None = None
@@ -69,12 +69,12 @@ def qr_link(channel_id: str) -> str:
 def _save(room_id: int, **cols) -> None:
     """있으면 고치고, 없으면 새로 (새로 넣을 때는 channel_id가 꼭 있어야 함)."""
     params = {"room_id": room_id, **cols}
-    with tx() as conn:
-        done = conn.execute("UPDATE bot.room_channels SET " + ", ".join(f"{k} = %({k})s" for k in cols)
-                            + " WHERE room_id = %(room_id)s", params).rowcount
+    with tx(write=True) as conn:
+        done = conn.execute("UPDATE room_channels SET " + ", ".join(f"{k} = :{k}" for k in cols)
+                            + " WHERE room_id = :room_id", params).rowcount
         if not done:
-            conn.execute(f"INSERT INTO bot.room_channels (room_id, {', '.join(cols)}) "
-                         f"VALUES (%(room_id)s, {', '.join(f'%({k})s' for k in cols)})", params)
+            conn.execute(f"INSERT INTO room_channels (room_id, {', '.join(cols)}) "
+                         f"VALUES (:room_id, {', '.join(f':{k}' for k in cols)})", params)
 
 
 def _find_channel(client, name: str) -> str | None:

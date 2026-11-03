@@ -12,6 +12,8 @@
 """
 
 import argparse
+import json
+import sqlite3
 import re
 import sys
 from datetime import datetime
@@ -36,11 +38,56 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("tick", help="노쇼 처리와 알림 한 번 실행")
     q = sub.add_parser("qr", help="회의실 QR 이미지 만들기")
     q.add_argument("--out", default="qr")
+    d = sub.add_parser("db", help="SQLite 초기화·상태·백업")
+    d.add_argument("operation", choices=["init", "status", "backup"])
+    d.add_argument("destination", nargs="?")
+    e = sub.add_parser("employee-add", help="로컬 직원 등록")
+    for key in ("emp-no", "name", "email", "department", "position"):
+        e.add_argument("--" + key, required=True)
+    e.add_argument("--slack-user")
+    room = sub.add_parser("room-add", help="로컬 회의실 등록")
+    for key in ("code", "name"):
+        room.add_argument("--" + key, required=True)
+    room.add_argument("--floor", type=int, required=True)
+    room.add_argument("--capacity", type=int, required=True)
     a = p.parse_args(argv)
 
     if a.now:
         at = datetime.fromisoformat(a.now)
         clock.freeze(at if at.tzinfo else at.replace(tzinfo=clock.TZ))
+
+    from roombot.db import backup, initialize, tx
+    initialize()
+    if a.cmd == "db":
+        if a.operation == "backup":
+            if not a.destination:
+                p.error("db backup은 저장할 파일 경로가 필요해요.")
+            print(backup(a.destination))
+        else:
+            with tx() as conn:
+                counts = {name: conn.execute(f"SELECT count(*) AS n FROM {name}").fetchone()["n"]
+                          for name in ("rooms", "employees", "reservations", "checkins", "noshow_cancellations", "reservation_cancellations")}
+                counts["integrity"] = conn.execute("PRAGMA integrity_check").fetchone()["integrity_check"]
+            print(json.dumps(counts, ensure_ascii=False))
+        return 0
+    if a.cmd in ("employee-add", "room-add"):
+        try:
+            with tx(write=True) as conn:
+                if a.cmd == "employee-add":
+                    eid = conn.execute("INSERT INTO employees(emp_no,name,email,department,position) VALUES(?,?,?,?,?) RETURNING id",
+                                       (a.emp_no, a.name, a.email, a.department, a.position)).fetchone()["id"]
+                    if a.slack_user:
+                        conn.execute("INSERT INTO slack_users(employee_id,slack_user_id) VALUES(?,?)", (eid,a.slack_user))
+                    print(f"직원 등록 완료 #{eid}")
+                else:
+                    rid = conn.execute("INSERT INTO rooms(code,name,floor,capacity) VALUES(?,?,?,?) RETURNING id",
+                                       (a.code, a.name, a.floor, a.capacity)).fetchone()["id"]
+                    rooms.clear_cache()
+                    print(f"회의실 등록 완료 #{rid}")
+        except sqlite3.IntegrityError:
+            print("중복된 값이나 잘못된 인원이에요. 기존 정보를 확인해 주세요.", file=sys.stderr)
+            return 1
+        return 0
 
     emp = None
     if a.as_emp:

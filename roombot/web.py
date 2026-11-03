@@ -220,6 +220,9 @@ def chart_image(kind: str, request: Request):
 
 @app.get("/healthz")
 def healthz():
+    from roombot.db import tx
+    with tx() as conn:
+        conn.execute("SELECT 1").fetchone()
     return {"ok": True}
 
 
@@ -324,8 +327,8 @@ def slack_callback(request: Request, code: str = "", state: str = "", error: str
     emp = rooms.employee_by_slack_user(slack_user_id) or (
         rooms.employee_by_email(info["email"]) if info.get("email") else None)
     if not emp:
-        return _page("denied", "다우오피스 직원 정보를 찾지 못했어요", [("슬랙 이메일", info.get("email", "-"))],
-                     "슬랙 프로필 이메일이 다우오피스 이메일과 같은지 확인해 주세요.", ok=False)
+        return _page("denied", "등록된 직원 정보를 찾지 못했어요", [("슬랙 이메일", info.get("email", "-"))],
+                     "슬랙 프로필 이메일이 등록된 이메일과 같은지 확인해 주세요.", ok=False)
     rooms.link_slack_user(emp["id"], slack_user_id)
     return _login_response(st["next"], emp, slack_user_id)
 

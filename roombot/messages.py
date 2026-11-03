@@ -114,10 +114,10 @@ def checkin_view(res: CheckinResult) -> CheckinView:
         if res.elsewhere:
             note = "내 회의는 위 회의실에서 시작 10분 전부터 체크인할 수 있어요."
         else:
-            note = "오늘 잡힌 내 예약이 없어요. 이 회의실을 쓰려면 다우오피스에서 먼저 예약해 주세요."
-        # 예약자 대신 온 경우 (휴가 등): 다우오피스에서 참석자로 추가되면 바로 체크인할 수 있음
+            note = "오늘 잡힌 내 예약이 없어요. 이 회의실을 쓰려면 회의실봇에서 먼저 예약해 주세요."
+        # 예약자 대신 온 경우 (휴가 등): 회의실봇에서 참석자로 추가되면 바로 체크인할 수 있음
         who = f"예약자({r['organizer_name']})" if r.get("organizer_name") else "예약자"
-        note += (f" {who} 대신 왔다면, 다우오피스에서 이 예약의 참석자로 추가해 달라고 하세요. "
+        note += (f" {who} 대신 왔다면, 회의실봇에서 이 예약의 참석자로 추가해 달라고 하세요. "
                  "추가되면 QR을 다시 찍어 바로 체크인할 수 있어요.")
         return CheckinView(False, "denied", "체크인할 수 없어요", rows, note,
                            lead="이 회의실의 예약자·참석자가 아니에요. 예약한 회의실을 다시 찾아주세요.")
@@ -130,9 +130,9 @@ def checkin_view(res: CheckinResult) -> CheckinView:
     if res.kind == "too_late":
         return CheckinView(False, "late", "체크인 시간이 지났어요",
                            three_rows(room, res.elsewhere) + [("취소된 예약", f"{r['title']} ({span(r['start_at'], r['end_at'])})")],
-                           f"시작 후 {GRACE_MIN}분 안에 체크인하지 않아 노쇼로 자동 취소됐어요. 계속 쓰려면 다우오피스에서 다시 예약해 주세요.")
+                           f"시작 후 {GRACE_MIN}분 안에 체크인하지 않아 노쇼로 자동 취소됐어요. 계속 쓰려면 회의실봇에서 다시 예약해 주세요.")
     return CheckinView(False, "free", "체크인할 수 없어요", three_rows(room, res.elsewhere),
-                       "이 시간에 회의실을 쓰려면 다우오피스에서 먼저 예약해 주세요.",
+                       "이 시간에 회의실을 쓰려면 회의실봇에서 먼저 예약해 주세요.",
                        lead="지금 이 회의실에 잡힌 내 예약이 없어요. 예약한 회의실을 다시 찾아주세요.")
 
 
@@ -212,7 +212,7 @@ def dm_auto_cancelled(r: dict) -> Reply:
     return Reply(fallback=f"❌ {r['room_name']} 예약이 노쇼로 취소됐어요", color=RED).add(
         header("노쇼로 예약이 취소됐어요"),
         section(_res_line(r)),
-        context(f"시작 후 {GRACE_MIN}분 안에 체크인이 없어 자동 취소했어요. 계속 쓰려면 다우오피스에서 다시 예약해 주세요."),
+        context(f"시작 후 {GRACE_MIN}분 안에 체크인이 없어 자동 취소했어요. 계속 쓰려면 회의실봇에서 다시 예약해 주세요."),
         actions(button(f"{style.FIND} 지금 빈 회의실 찾기", "free_at", free_value(now, min(remaining, timedelta(hours=2)), 1),
                        style="primary")))
 

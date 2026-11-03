@@ -1,6 +1,6 @@
 """환경 변수 설정 (.env 파일도 읽음)."""
 
-import getpass
+from pathlib import Path
 import os
 from dataclasses import dataclass, field
 
@@ -19,7 +19,7 @@ def _list(name: str) -> list[str]:
 
 @dataclass
 class Settings:
-    database_url: str = os.getenv("DATABASE_URL", f"postgresql://{getpass.getuser()}@localhost:5432/daouoffice")
+    sqlite_path: str = os.getenv("SQLITE_PATH", str(Path(__file__).resolve().parent.parent / "data" / "roombot.sqlite3"))
     timezone: str = os.getenv("APP_TIMEZONE", "Asia/Seoul")
     # 가상 시계: 이 시각부터 시간이 흐르는 것처럼 동작 (예: 2026-10-17T10:03+09:00)
     app_now: str | None = os.getenv("APP_NOW") or None

@@ -42,10 +42,10 @@ def notify_url_change(client) -> None:
     from roombot.db import tx
     if not settings.admin_slack_user or not settings.public_base_url.startswith("https://"):
         return
-    with tx() as conn:
-        row = conn.execute("SELECT value FROM bot.system_settings WHERE key = 'public_url'").fetchone()
-        conn.execute("""INSERT INTO bot.system_settings (key, value) VALUES ('public_url', %s)
-                        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()""",
+    with tx(write=True) as conn:
+        row = conn.execute("SELECT value FROM system_settings WHERE key = 'public_url'").fetchone()
+        conn.execute("""INSERT INTO system_settings (key, value) VALUES ('public_url', ?)
+                        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = app_now()""",
                      (settings.public_base_url,))
     old = row["value"] if row else None
     if old and old != settings.public_base_url:
@@ -73,6 +73,8 @@ def main() -> None:
     logging.getLogger("apscheduler").setLevel(logging.WARNING)   # 30초마다 남는 실행 기록은 숨김
     log.info("현재 시각 %s%s", clock.now().isoformat(timespec="minutes"), " (가상 시계)" if settings.app_now else "")
 
+    from roombot.db import initialize
+    initialize()
     notifier = default_notifier()
     web.app.state.notifier = notifier
     scheduler.start(notifier)

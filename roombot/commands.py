@@ -166,6 +166,8 @@ def handle(text: str, employee: dict | None, slack_user_id: str | None = None) -
     if not words or words[0].lower() in ("help", "도움말", "?"):
         return help_reply()
     cmd, args = words[0].lower(), words[1:]
+    if cmd in ("예약", "reserve", "취소", "cancel", "참석자", "attendee"):
+        return booking_reply(cmd, args, employee, slack_user_id)
     if cmd in ("now", "현황", "지금"):
         return status_reply()
     if cmd in ("free", "빈방", "빈회의실", "빈"):
@@ -184,6 +186,45 @@ def handle(text: str, employee: dict | None, slack_user_id: str | None = None) -
     return room_reply(words)
 
 
+def booking_reply(cmd: str, args: list[str], employee: dict | None, slack_user_id: str | None) -> Reply:
+    from roombot import admin, bookings
+    if not employee:
+        return _not_linked()
+    usage = "`/룸 예약 9A 내일 14:00 1h 회의제목`\n`/룸 취소 예약번호`\n`/룸 참석자 예약번호 사번` (슬랙 @멘션도 가능)"
+    try:
+        if cmd in ("예약", "reserve"):
+            if len(args) < 5:
+                raise ValueError(usage)
+            found = rooms.find_rooms(args[0])
+            day, at, duration = parse_date(args[1]), parse_time(args[2]), parse_duration(args[3])
+            if len(found) != 1 or day is None or at is None or duration is None:
+                raise ValueError(usage)
+            start = datetime.combine(day, at, clock.TZ)
+            rid = bookings.reserve(found[0]["id"], employee["id"], start, start + duration, " ".join(args[4:]))
+            return Reply(fallback=f"예약 완료 #{rid}").add(
+                header("예약 완료"), section(f"*#{rid}* · *{found[0]['label']}* · {fmt_day(day)} {span(start, start + duration)}\n{' '.join(args[4:])}"),
+                context(f"참석자 추가: `/룸 참석자 {rid} 사번` · 취소: `/룸 취소 {rid}`"),
+                quick_actions())
+        if not args or not args[0].isdigit():
+            raise ValueError(usage)
+        rid = int(args[0])
+        if cmd in ("취소", "cancel"):
+            if len(args) != 1:
+                raise ValueError(usage)
+            bookings.cancel(rid, employee["id"], is_admin=admin.is_admin(slack_user_id))
+            return Reply(fallback=f"예약 #{rid} 취소 완료").add(section(f"예약 *#{rid}*을 취소했어요. 기록은 보존돼요."), quick_actions())
+        if len(args) != 2:
+            raise ValueError(usage)
+        mention = re.fullmatch(r"<@([A-Z0-9]+)(?:\|[^>]+)?>", args[1])
+        person = rooms.employee_by_slack_user(mention[1]) if mention else rooms.employee_by_emp_no(args[1])
+        if not person:
+            raise ValueError("등록·연결된 직원을 찾지 못했어요. 사번을 확인해 주세요.")
+        bookings.add_attendee(rid, employee["id"], person["id"], is_admin=admin.is_admin(slack_user_id))
+        return Reply(fallback=f"예약 #{rid} 참석자 추가").add(section(f"예약 *#{rid}*에 *{person['name']}*님을 추가했어요."))
+    except ValueError as exc:
+        return Reply(fallback="예약 변경 안내").add(section(str(exc)))
+
+
 def help_reply() -> Reply:
     r = Reply(fallback="회의실봇 사용법")
     r.add(
@@ -194,13 +235,14 @@ def help_reply() -> Reply:
             "*빈 회의실 찾기*\n`/룸 빈방 오후 2시 1시간 6명`\n`/룸 찾기` (창에서 고르기)",
             "*내 예약 · 통계*\n`/룸 내예약`\n`/룸 통계`",
         ]),
+        section("*예약 등록·변경*\n`/룸 예약 9A 내일 14:00 1h 회의제목`\n`/룸 참석자 예약번호 사번` · `/룸 취소 예약번호`"),
         divider(),
         section("*QR 체크인 규칙*\n"
                 "• 회의실 입구 QR을 휴대폰 카메라로 찍으면 회의실 채널이 열려요 → *[✅ 체크인]* (처음이면 *[채널 참여]* 먼저)\n"
                 "• 시작 *10분 전*부터, 참석자 중 *누구나* 찍으면 돼요\n"
                 "• 시작 후 *10분* 안에 아무도 체크인하지 않으면 예약이 *자동 취소*돼요\n"
                 "• 다른 회의실 QR을 찍으면 체크인되지 않고, 내 예약 회의실을 알려줘요\n"
-                "• 예약자 대신 왔다면(휴가 등) 다우오피스에서 그 예약의 *참석자로 추가*되면 체크인할 수 있어요"),
+                "• 예약자 대신 왔다면(휴가 등) 회의실봇에서 그 예약의 *참석자로 추가*되면 체크인할 수 있어요"),
         context("상태 표시   " + style.legend()),
         context("회의실   " + "   ".join(
             f"*{fl}층* " + " · ".join(x["name"] for x in rooms.all_rooms() if x["floor"] == fl) for fl in rooms.floors())),
@@ -403,7 +445,7 @@ def schedule_tables(sched: list[dict], free: list[tuple[datetime, datetime]]) ->
         state = _state_cell(r, note)
         others = [a["name"] for a in r["attendees"] if a["name"] != r["organizer_name"]]
         guests = ", ".join(others[:6]) + (f" 외 {len(others) - 6}명" if len(others) > 6 else "")
-        title = (r["title"], S) if r["state"] == "노쇼 취소" else (r["title"], B)
+        title = (f"#{r['id']} {r['title']}", B)
         groups[idx][1].append([when, rt(state), rt(title),
                                rt((r["organizer_name"], B), (f", {guests}" if guests else ""),
                                   (f"  ({len(r['attendees'])}명)", I))])
@@ -439,7 +481,7 @@ def schedule_reply(room: dict, day: date, surface: str = "message") -> Reply:
                           divider())
                 continue
             note = _status_note(r)
-            t = clip(r["title"], TITLE_MID)
+            t = f"#{r['id']} " + clip(r["title"], TITLE_MID)
             title = f"~{t}~" if r["state"] == "노쇼 취소" else f"*{t}*"
             reply.add(section("", fields=[
                 f"{icon(r['state'])} {bspan(r['start_at'], r['end_at'])}" + (f"\n{note}" if note else ""),
@@ -549,7 +591,7 @@ def free_search(start: datetime, dur: timedelta, cap: int = 1, surface: str = "m
                 break
         reply.add(section("조건에 맞는 빈 회의실이 없어요." + (" 이 시간대는 어때요?" if alts else "")))
         reply.add(actions(*alts))
-    reply.add(actions(button("조건 바꾸기", "open_finder")))
+    reply.add(context("예약: `/룸 예약 회의실 날짜 시작시각 사용시간 회의제목`"), actions(button("조건 바꾸기", "open_finder")))
     return reply
 
 
@@ -558,7 +600,7 @@ def free_search(start: datetime, dur: timedelta, cap: int = 1, surface: str = "m
 # ---------------------------------------------------------------
 
 def _not_linked() -> Reply:
-    msg = "슬랙 계정이 다우오피스 직원 정보와 연결되지 않았어요.\n슬랙 프로필 이메일이 다우오피스 이메일과 같은지 확인해 주세요."
+    msg = "슬랙 계정이 등록된 직원 정보와 연결되지 않았어요.\n슬랙 프로필 이메일이 등록된 이메일과 같은지 확인해 주세요."
     r = Reply(fallback="계정 연결 필요").add(section(f"{style.WARN} {msg}"))
     if settings.demo_mode:
         r.add(context("(시연 모드) `/룸 link D0001` 처럼 사번으로 연결할 수 있어요."))
@@ -598,7 +640,7 @@ def my_reply(employee: dict | None, surface: str = "message") -> Reply:
     reply.add(header(f"{employee['name']}님의 예약"),
               context(f"{employee['department']}   오늘부터 7일   *{len(rows)}건*"))
     if not rows:
-        return reply.add(section("예약이 없어요."), quick_actions(my=False))
+        return reply.add(section("예약이 없어요.\n`/룸 예약 9A 내일 14:00 1h 회의제목`으로 등록해 주세요."), quick_actions(my=False))
     if surface != "modal":
         by_day: dict[date, list] = {}
         for r in rows:
@@ -606,7 +648,7 @@ def my_reply(employee: dict | None, surface: str = "message") -> Reply:
             st = _state_cell(r, note)
             if r["i_checked_in"]:
                 st += f"\n{style.OK} 내가 체크인"
-            t = clip(r["title"], TITLE_MID)
+            t = f"#{r['id']} " + clip(r["title"], TITLE_MID)
             title = (t, S) if r["state"] == "노쇼 취소" else (t, B)
             by_day.setdefault(r["start_at"].date(), []).append(
                 [rt((span(r["start_at"], r["end_at"]), B)), rt(title), rt(r["room_name"]),
@@ -628,7 +670,7 @@ def my_reply(employee: dict | None, surface: str = "message") -> Reply:
             last_day = d
         note = _status_note(r) if r["state"] != "종료" else ""
         mine = f"\n{style.OK} 내가 체크인" if r["i_checked_in"] else ""
-        t = clip(r["title"], TITLE_MID)
+        t = f"#{r['id']} " + clip(r["title"], TITLE_MID)
         title = f"~{t}~" if r["state"] == "노쇼 취소" else f"*{t}*"
         reply.add(section("", fields=[
             f"{icon(r['state'])} {bspan(r['start_at'], r['end_at'])}" + (f"\n{note}" if note else "") + mine,

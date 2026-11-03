@@ -28,7 +28,7 @@ UNMATCHED_RETRY = 600               # 10분 뒤에 다시 확인 (프로필 이�
 
 
 def employee_for(client, slack_user_id: str) -> dict | None:
-    """슬랙 사용자 → 다우오피스 직원. 처음엔 슬랙 프로필 이메일로 찾고 연결해 둠."""
+    """슬랙 사용자 → 등록된 직원. 처음엔 슬랙 프로필 이메일로 찾고 연결해 둠."""
     emp = rooms.employee_by_slack_user(slack_user_id)
     if emp:
         return emp
@@ -97,43 +97,82 @@ def _parse_room_value(value: str) -> tuple[dict | None, date]:
 # 빈 회의실 찾기 창
 # ---------------------------------------------------------------
 
-def finder_view(initial: datetime | None = None, minutes: int = 60, cap: int = 1) -> dict:
+def finder_view(initial: datetime | None = None, minutes: int = 60, notice: str = "") -> dict:
     start = initial or rooms.default_start()
+    if initial is None:
+        if start.time() < rooms.OPEN_TIME:
+            start = datetime.combine(start.date(), rooms.OPEN_TIME, clock.TZ)
+        elif start.time() >= rooms.CLOSE_TIME:
+            start = datetime.combine(start.date() + timedelta(days=1), rooms.OPEN_TIME, clock.TZ)
     dur_opts = [("30분", "30"), ("1시간", "60"), ("1시간 30분", "90"), ("2시간", "120"), ("3시간", "180")]
-    cap_opts = [("상관없음", "1")] + [(f"{n}명 이상", str(n)) for n in (2, 4, 6, 8, 10, 12, 16, 20)]
+    time_opts = [(f"{h:02d}:{m:02d}", f"{h:02d}:{m:02d}") for h in range(9,18) for m in (0,30)]
+    if start.strftime("%H:%M") not in {v for _,v in time_opts}:
+        time_opts.append((start.strftime("%H:%M"), start.strftime("%H:%M")))
+        time_opts.sort()
+    if str(minutes) not in {v for _,v in dur_opts}:
+        dur_opts.append((f"{minutes}분", str(minutes)))
 
-    def opt(t, v):
-        return {"text": {"type": "plain_text", "text": t}, "value": v}
+    def opt(label, value):
+        return {"text": {"type": "plain_text", "text": label}, "value": value}
 
-    return {
-        "type": "modal", "callback_id": FINDER_ID,
-        "title": {"type": "plain_text", "text": "빈방 찾기"},
-        "submit": {"type": "plain_text", "text": "찾기"},
-        "close": {"type": "plain_text", "text": "닫기"},
-        "blocks": [
-            {"type": "input", "block_id": "date", "label": {"type": "plain_text", "text": "날짜"},
-             "element": {"type": "datepicker", "action_id": "v", "initial_date": start.date().isoformat()}},
-            {"type": "input", "block_id": "time", "label": {"type": "plain_text", "text": "시작 시간"},
-             "element": {"type": "timepicker", "action_id": "v", "initial_time": start.strftime("%H:%M")}},
-            {"type": "input", "block_id": "dur", "label": {"type": "plain_text", "text": "사용 시간"},
-             "element": {"type": "static_select", "action_id": "v",
-                         "options": [opt(t, v) for t, v in dur_opts],
-                         "initial_option": opt(*next((o for o in dur_opts if o[1] == str(minutes)), dur_opts[1]))}},
-            {"type": "input", "block_id": "cap", "label": {"type": "plain_text", "text": "인원"},
-             "element": {"type": "static_select", "action_id": "v",
-                         "options": [opt(t, v) for t, v in cap_opts],
-                         "initial_option": opt(*next((o for o in cap_opts if o[1] == str(cap)), cap_opts[0]))}},
-            {"type": "context", "elements": [{"type": "mrkdwn", "text": "노쇼로 취소된 예약은 빈 것으로 계산해요."}]},
-        ],
-    }
+    blocks = [
+        {"type": "section", "block_id": "date", "text": {"type": "mrkdwn", "text": "날짜"},
+         "accessory": {"type": "datepicker", "action_id": "finder_date", "initial_date": start.date().isoformat()}},
+        {"type": "section", "block_id": "time", "text": {"type": "mrkdwn", "text": "시작"},
+         "accessory": {"type": "static_select", "action_id": "finder_time",
+                     "options": [opt(*o) for o in time_opts], "initial_option": opt(start.strftime("%H:%M"),start.strftime("%H:%M"))}},
+        {"type": "section", "block_id": "dur", "text": {"type": "mrkdwn", "text": "사용 시간"},
+         "accessory": {"type": "static_select", "action_id": "finder_dur",
+                     "options": [opt(*o) for o in dur_opts],
+                     "initial_option": opt(*next(o for o in dur_opts if o[1]==str(minutes)))}},
+        context("조건을 바꾸면 바로 갱신돼요. 회의실의 빈 시간도 아래에서 함께 확인하세요."),
+    ]
+    if notice:
+        blocks.append(section(notice))
+    end = start + timedelta(minutes=minutes)
+    if start < clock.now():
+        blocks.append(section("지난 시간이에요. 시작 시간을 다시 선택해 주세요."))
+    elif end.date() != start.date() or end.time() > rooms.CLOSE_TIME:
+        blocks.append(section("사용 시간이 18시를 넘어요. 시작이나 사용 시간을 바꿔 주세요."))
+    else:
+        found = rooms.free_rooms(start,end)
+        blocks.extend([divider(),context(f"*{commands.span(start,end)} · 빈방 {len(found)}곳*")])
+        schedules = rooms.room_schedules([r['id'] for r in found],start.date(),include_attendees=False)
+        for room in found[:40]:
+            windows = rooms.free_windows(schedules[room['id']],start.date())
+            free_text = " · ".join(commands.span(lo,hi) for lo,hi in windows[:3])
+            if len(windows)>3:
+                free_text += f" 외 {len(windows)-3}구간"
+            value=json.dumps({'room':room['id'],'start':start.isoformat(),'minutes':minutes},separators=(',',':'))
+            blocks.append(section(f"*{room['label']}*\n빈 시간 {free_text or commands.span(start,end)}",
+                                  accessory=button("예약",f"book_room:{room['id']}",value)))
+        if not found:
+            blocks.append(section("이 시간에 빈 회의실이 없어요. 위에서 시간을 바꿔 주세요."))
+    return {"type":"modal","callback_id":FINDER_ID,
+            "title":{"type":"plain_text","text":"빈방 찾기"},
+            "close":{"type":"plain_text","text":"닫기"},"blocks":[b for b in blocks if b]}
 
 
-def _finder_values(view: dict) -> tuple[datetime, timedelta, int]:
-    v = view["state"]["values"]
-    d = date.fromisoformat(v["date"]["v"]["selected_date"])
-    t = time.fromisoformat(v["time"]["v"]["selected_time"])
-    return (datetime.combine(d, t, clock.TZ), timedelta(minutes=int(v["dur"]["v"]["selected_option"]["value"])),
-            int(v["cap"]["v"]["selected_option"]["value"]))
+def _finder_values(view: dict) -> tuple[datetime, timedelta]:
+    values=view["state"]["values"]
+    day=date.fromisoformat(values["date"]["finder_date"]["selected_date"])
+    at=time.fromisoformat(values["time"]["finder_time"]["selected_option"]["value"])
+    duration=timedelta(minutes=int(values["dur"]["finder_dur"]["selected_option"]["value"]))
+    return datetime.combine(day,at,clock.TZ),duration
+
+
+def booking_view(value: str) -> dict:
+    data=json.loads(value)
+    room=next(r for r in rooms.all_rooms() if r['id']==data['room'])
+    start=datetime.fromisoformat(data['start'])
+    end=start+timedelta(minutes=data['minutes'])
+    return {"type":"modal","callback_id":"booking_form","private_metadata":value,
+            "title":{"type":"plain_text","text":"회의실 예약"},
+            "submit":{"type":"plain_text","text":"예약"},"close":{"type":"plain_text","text":"취소"},
+            "blocks":[section(f"*{room['label']}* · {commands.fmt_day(start.date())} {commands.span(start,end)}"),
+                      {"type":"input","block_id":"title","label":{"type":"plain_text","text":"회의 제목"},
+                       "element":{"type":"plain_text_input","action_id":"title","max_length":200}},
+                      context("예약 후 `/룸 참석자 예약번호 사번`으로 참석자를 추가할 수 있어요.")]}
 
 
 # ---------------------------------------------------------------
@@ -399,14 +438,43 @@ def build_app() -> App:
         uid = body["user"]["id"]
         client.views_publish(user_id=uid, view=home_view(employee_for(client, uid)))
 
-    # ----- 빈 회의실 찾기 창 제출 → 같은 창을 결과로 바꿈 -----
-
-    @app.view(FINDER_ID)
-    def finder_submit(ack, view):
-        start, dur, cap = _finder_values(view)
-        if start.date() < clock.now().date():
-            ack(response_action="errors", errors={"date": "지난 날짜예요."})
+    # 조건 변경 즉시 같은 창의 빈방 목록을 갱신한다.
+    @app.action(re.compile(r"^finder_(date|time|dur)$"))
+    def finder_changed(ack, body, client):
+        ack()
+        try:
+            start,duration=_finder_values(body['view'])
+        except (KeyError,TypeError,ValueError):
             return
-        ack(response_action="update", view=modal("빈 회의실", commands.free_search(start, dur, cap, "modal")))
+        client.views_update(view_id=body['view']['id'],hash=body['view'].get('hash'),
+                            view=finder_view(start,int(duration.total_seconds()//60)))
+
+    @app.action(re.compile(r"^book_room:"))
+    def book_room(ack, body, client):
+        ack()
+        emp=employee_for(client,body['user']['id'])
+        if not emp:
+            client.views_push(trigger_id=body['trigger_id'],view=modal("직원 연결",commands._not_linked()))
+            return
+        client.views_push(trigger_id=body['trigger_id'],view=booking_view(body['actions'][0]['value']))
+
+    @app.view("booking_form")
+    def booking_submit(ack, body, view, client):
+        from roombot import bookings
+        emp=rooms.employee_by_slack_user(body['user']['id'])
+        if not emp:
+            ack(response_action="errors",errors={"title":"직원 연결을 먼저 확인해 주세요."})
+            return
+        try:
+            data=json.loads(view['private_metadata'])
+            start=datetime.fromisoformat(data['start'])
+            title=view['state']['values']['title']['title']['value']
+            rid=bookings.reserve(data['room'],emp['id'],start,start+timedelta(minutes=data['minutes']),title)
+        except (ValueError,KeyError,TypeError) as exc:
+            ack(response_action="errors",errors={"title":str(exc)})
+            return
+        reply=Reply(fallback=f"예약 완료 #{rid}").add(header("예약 완료"),
+                  section(f"예약 *#{rid}* · *{title}*"),context(f"참석자 추가: `/룸 참석자 {rid} 사번`"))
+        ack(response_action="update",view=modal("예약 완료",reply))
 
     return app

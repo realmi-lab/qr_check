@@ -1,7 +1,7 @@
 #!/bin/zsh
 # 회의실봇 자동 실행 등록/해제 (macOS launchd, 로그인한 사용자 기준)
 #
-#   scripts/autostart.sh install     DB·서버·터널을 로그인 시 자동 실행, 멈추면 다시 실행
+#   scripts/autostart.sh install     서버·터널을 로그인 시 자동 실행, 멈추면 다시 실행
 #   scripts/autostart.sh uninstall   자동 실행 해제 (DB는 그대로 둠)
 #   scripts/autostart.sh status      상태 보기
 #   scripts/autostart.sh restart     서버만 다시 시작
@@ -12,10 +12,8 @@ set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 AGENTS="$HOME/Library/LaunchAgents"
 LOGS="$ROOT/logs"
-PG_BIN="/Applications/Postgres.app/Contents/Versions/16/bin"
-PG_DATA="$HOME/Library/Application Support/Postgres/var-16"
 DOMAIN="gui/$(id -u)"
-LABELS=(com.roombot.postgres com.roombot.server com.roombot.tunnel)
+LABELS=(com.roombot.server com.roombot.tunnel)
 
 plist() {  # plist <label> <log-name> <args...>
   local label=$1 name=$2; shift 2
@@ -49,11 +47,6 @@ EOF
 
 install() {
   mkdir -p "$AGENTS" "$LOGS"
-  # 수동으로 켜 둔 PostgreSQL이 있으면 끄고 launchd가 관리하게 함
-  if "$PG_BIN/pg_ctl" -D "$PG_DATA" status >/dev/null 2>&1; then
-    "$PG_BIN/pg_ctl" -D "$PG_DATA" -m fast stop >/dev/null
-  fi
-  plist com.roombot.postgres postgres "$PG_BIN/postgres" -D "$PG_DATA" > "$AGENTS/com.roombot.postgres.plist"
   plist com.roombot.server server /usr/bin/caffeinate -i -s "$ROOT/.venv/bin/python" -m roombot.main > "$AGENTS/com.roombot.server.plist"
   plist com.roombot.tunnel tunnel "$ROOT/.venv/bin/python" "$ROOT/scripts/tunnel.py" > "$AGENTS/com.roombot.tunnel.plist"
   for l in "${LABELS[@]}"; do
@@ -69,7 +62,7 @@ uninstall() {
     launchctl bootout "$DOMAIN/$l" 2>/dev/null || true
     rm -f "$AGENTS/$l.plist"
   done
-  echo "자동 실행 해제 완료 (PostgreSQL도 멈췄어요. 필요하면 Postgres.app으로 켜세요)"
+  echo "자동 실행 해제 완료 (SQLite 파일은 보존)"
 }
 
 status() {

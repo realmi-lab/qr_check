@@ -56,12 +56,12 @@ def morning_briefs() -> list[tuple[dict, object]]:
     if now.time() < at or now.time() >= time(18, 0):
         return []
     key, today = "morning_brief_last", now.date().isoformat()
-    with tx() as conn:
-        row = conn.execute("SELECT value FROM bot.system_settings WHERE key = %s FOR UPDATE", (key,)).fetchone()
+    with tx(write=True) as conn:
+        row = conn.execute("SELECT value FROM system_settings WHERE key = ?", (key,)).fetchone()
         if row and row["value"] == today:
             return []
-        conn.execute("""INSERT INTO bot.system_settings (key, value) VALUES (%s, %s)
-                        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()""", (key, today))
+        conn.execute("""INSERT INTO system_settings (key, value) VALUES (?, ?)
+                        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = app_now()""", (key, today))
     out = []
     for emp in rooms.linked_users():
         meetings = [m for m in rooms.my_reservations(emp["id"], days=0)

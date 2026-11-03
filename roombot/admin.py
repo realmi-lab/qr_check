@@ -5,7 +5,7 @@
       예) /룸 qwerasdf 9A 10/20 14:00 2h 공사
 
 실행하면
-  1) 그 시간에 겹치는 예약을 취소 (다우오피스에서 취소하는 것처럼 예약을 지우고, 내용은 bot.admin_cancellations에 남김)
+  1) 그 시간에 겹치는 예약을 취소 (원본 내용과 참석자를 admin_cancellations에 보존)
   2) 관리자 예약을 넣음 (제목 '🚧 사유', 노쇼·리마인더 대상 아님, 시작하면 자동으로 사용중)
   3) 취소된 예약의 참석자 모두에게 슬랙 DM으로 알림
 
@@ -76,10 +76,11 @@ def overlapping(room_id: int, start: datetime, end: datetime) -> list[dict]:
     with tx() as conn:
         rows = conn.execute(
             """SELECT r.id, r.title, r.start_at, r.end_at, r.organizer_id, e.name AS organizer_name,
-                      EXISTS (SELECT 1 FROM bot.admin_blocks b WHERE b.reservation_id = r.id) AS is_block
-               FROM daou.reservations r JOIN daou.employees e ON e.id = r.organizer_id
-               WHERE r.room_id = %s AND tstzrange(r.start_at, r.end_at) && tstzrange(%s, %s)
-                 AND NOT EXISTS (SELECT 1 FROM bot.noshow_cancellations n WHERE n.reservation_id = r.id)
+                      EXISTS (SELECT 1 FROM admin_blocks b WHERE b.reservation_id = r.id) AS is_block
+               FROM reservations r JOIN employees e ON e.id = r.organizer_id
+               WHERE r.room_id = ? AND r.end_at > ? AND r.start_at < ?
+                 AND NOT EXISTS (SELECT 1 FROM reservation_cancellations n WHERE n.reservation_id = r.id)
+                 AND NOT EXISTS (SELECT 1 FROM noshow_cancellations n WHERE n.reservation_id = r.id)
                ORDER BY r.start_at""",
             (room_id, start, end)).fetchall()
     att = rooms.attendees_of([r["id"] for r in rows])
@@ -127,46 +128,48 @@ def execute(room: dict, start: datetime, end: datetime, reason: str, admin_slack
     from roombot.commands import free_value
     admin_emp = rooms.employee_by_slack_user(admin_slack_user)
     if not admin_emp:
-        return Reply().add(section(f"{style.WARN} 관리자 슬랙 계정이 다우오피스 직원과 연결돼 있지 않아요.")), []
+        return Reply().add(section(f"{style.WARN} 관리자 슬랙 계정이 등록된 직원과 연결돼 있지 않아요.")), []
     now = clock.now()
-    with tx() as conn:
-        conn.execute("SELECT pg_advisory_xact_lock(42, %s)", (room["id"],))   # 같은 회의실 동시 실행 방지
+    with tx(write=True) as conn:
         rows = conn.execute(
-            """SELECT r.* FROM daou.reservations r
-               WHERE r.room_id = %s AND tstzrange(r.start_at, r.end_at) && tstzrange(%s, %s)
-               FOR UPDATE""", (room["id"], start, end)).fetchall()
+            """SELECT r.* FROM reservations r
+               WHERE r.room_id = ? AND r.end_at > ? AND r.start_at < ?
+                 AND NOT EXISTS (SELECT 1 FROM reservation_cancellations n WHERE n.reservation_id = r.id)
+              """, (room["id"], start, end)).fetchall()
         att = {}
         for a in conn.execute(
-                """SELECT a.reservation_id, e.* FROM daou.reservation_attendees a
-                   JOIN daou.employees e ON e.id = a.employee_id WHERE a.reservation_id = ANY(%s)""",
+                """SELECT a.reservation_id, e.* FROM reservation_attendees a
+                   JOIN employees e ON e.id = a.employee_id WHERE a.reservation_id IN (SELECT value FROM json_each(?))""",
                 ([r["id"] for r in rows],)).fetchall():
             att.setdefault(a["reservation_id"], []).append(a)
         noshow = {x["reservation_id"] for x in conn.execute(
-            "SELECT reservation_id FROM bot.noshow_cancellations WHERE reservation_id = ANY(%s)",
+            "SELECT reservation_id FROM noshow_cancellations WHERE reservation_id IN (SELECT value FROM json_each(?))",
             ([r["id"] for r in rows],)).fetchall()}
         blocks = {x["reservation_id"] for x in conn.execute(
-            "SELECT reservation_id FROM bot.admin_blocks WHERE reservation_id = ANY(%s)",
+            "SELECT reservation_id FROM admin_blocks WHERE reservation_id IN (SELECT value FROM json_each(?))",
             ([r["id"] for r in rows],)).fetchall()}
         cancelled = []
         for r in rows:
             if r["id"] not in noshow and r["id"] not in blocks:
                 conn.execute(
-                    """INSERT INTO bot.admin_cancellations
+                    """INSERT INTO admin_cancellations
                          (reservation_id, room_id, title, organizer_id, start_at, end_at, attendee_ids, reason, cancelled_at)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING""",
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
                     (r["id"], r["room_id"], r["title"], r["organizer_id"], r["start_at"], r["end_at"],
                      [a["id"] for a in att.get(r["id"], [])], reason, now))
                 cancelled.append(r)
-        # 다우오피스에서 취소 = 예약이 사라짐 (노쇼로 이미 취소된 예약, 예전 관리자 배정도 같이 정리)
-        conn.execute("DELETE FROM daou.reservations WHERE id = ANY(%s)", ([r["id"] for r in rows],))
+        # 관리자 취소는 내용을 보관한 후 예약을 정리 (노쇼로 이미 취소된 예약, 예전 관리자 배정도 같이 정리)
+        for original in rows:
+            conn.execute("INSERT INTO reservation_cancellations(reservation_id,cancelled_by,reason) "
+                         "VALUES (?,?,?) ON CONFLICT DO NOTHING", (original["id"], admin_emp["id"], reason))
         bid = conn.execute(
-            """INSERT INTO daou.reservations (room_id, title, organizer_id, start_at, end_at)
-               VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+            """INSERT INTO reservations (room_id, title, organizer_id, start_at, end_at)
+               VALUES (?, ?, ?, ?, ?) RETURNING id""",
             (room["id"], f"🚧 {reason}", admin_emp["id"], start, end)).fetchone()["id"]
-        conn.execute("INSERT INTO daou.reservation_attendees VALUES (%s, %s, true)", (bid, admin_emp["id"]))
-        conn.execute("INSERT INTO bot.admin_blocks (reservation_id, reason, admin_slack_user) VALUES (%s, %s, %s)",
+        conn.execute("INSERT INTO reservation_attendees VALUES (?, ?, true)", (bid, admin_emp["id"]))
+        conn.execute("INSERT INTO admin_blocks (reservation_id, reason, admin_slack_user) VALUES (?, ?, ?)",
                      (bid, reason, admin_slack_user))
-        conn.execute("UPDATE bot.admin_cancellations SET block_id = %s WHERE reservation_id = ANY(%s)",
+        conn.execute("UPDATE admin_cancellations SET block_id = ? WHERE reservation_id IN (SELECT value FROM json_each(?))",
                      (bid, [r["id"] for r in cancelled]))
 
     dms = []
@@ -177,7 +180,7 @@ def execute(room: dict, start: datetime, end: datetime, reason: str, admin_slack
             header("회의실 예약이 취소됐어요"),
             section(f"{style.ROOM} *{room['label']}*  ·  {_when(r['start_at'], r['end_at'])}\n*{r['title']}*"),
             section(f"{style.WARN} 사유: *{reason}*\n관리자가 이 시간에 회의실을 써야 해서 예약을 취소했어요."),
-            context("다른 회의실이 필요하면 아래에서 찾아 다우오피스에서 다시 예약해 주세요."),
+            context("다른 회의실이 필요하면 아래에서 찾아 회의실봇에서 다시 예약해 주세요."),
             actions(button(f"{style.FIND} 그 시간 빈 회의실 찾기", "free_at",
                            free_value(find_at, max(dur, timedelta(minutes=30)), len(att.get(r["id"], [])) or 1),
                            style="primary")))
@@ -197,5 +200,5 @@ def block_ids(reservation_ids: list[int]) -> set[int]:
         return set()
     with tx() as conn:
         return {r["reservation_id"] for r in conn.execute(
-            "SELECT reservation_id FROM bot.admin_blocks WHERE reservation_id = ANY(%s)",
+            "SELECT reservation_id FROM admin_blocks WHERE reservation_id IN (SELECT value FROM json_each(?))",
             (reservation_ids,)).fetchall()}

@@ -99,8 +99,8 @@ def upload(key: tuple, png: bytes, title: str) -> str | None:
         log.exception("그림 올리기 실패")
         return None
     try:
-        with tx() as conn:
-            conn.execute("INSERT INTO bot.slack_images (file_id, kind) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+        with tx(write=True) as conn:
+            conn.execute("INSERT INTO slack_images (file_id, kind) VALUES (?, ?) ON CONFLICT DO NOTHING",
                          (fid, key[0]))
     except Exception:
         log.exception("올린 그림 기록 실패")
@@ -119,8 +119,8 @@ def cleanup(limit: int = 50) -> int:
         return 0
     with tx() as conn:
         old = [r["file_id"] for r in conn.execute(
-            "SELECT file_id FROM bot.slack_images WHERE created_at < now() - make_interval(days => %s) "
-            "ORDER BY created_at LIMIT %s", (KEEP_DAYS, limit)).fetchall()]
+            "SELECT file_id FROM slack_images WHERE created_at < shift_time(app_now(), -86400 * ?) "
+            "ORDER BY created_at LIMIT ?", (KEEP_DAYS, limit)).fetchall()]
     done = []
     for fid in old:
         try:
@@ -133,8 +133,8 @@ def cleanup(limit: int = 50) -> int:
                 log.warning("예전 그림 지우기 실패 (%s): %s", fid, e.response.get("error"))
                 break
     if done:
-        with tx() as conn:
-            conn.execute("DELETE FROM bot.slack_images WHERE file_id = ANY(%s)", (done,))
+        with tx(write=True) as conn:
+            conn.execute("DELETE FROM slack_images WHERE file_id IN (SELECT value FROM json_each(?))", (done,))
         log.info("30일 지난 그림 %d개를 슬랙에서 지움", len(done))
     return len(done)
 
