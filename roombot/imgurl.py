@@ -9,6 +9,7 @@ from roombot import clock
 from roombot.config import settings
 
 TTL = 7 * 86400   # 7일
+IMAGE_VERSION = "schedule-v2"   # 표시 변경 후에는 이전 이미지 캐시를 재사용하지 않음
 
 
 def _sig(kind: str, params: dict) -> str:
@@ -21,6 +22,7 @@ def url(kind: str, **params) -> str | None:
     if not settings.public_base_url.startswith("https://"):
         return None
     params = {k: v for k, v in params.items() if v is not None}
+    params["rev"] = IMAGE_VERSION
     params["v"] = int(clock.now().timestamp() // 300)   # 5분마다 새 그림 (슬랙 캐시 갱신)
     params["e"] = int(time.time()) + TTL
     params["s"] = _sig(kind, params)
@@ -49,6 +51,7 @@ def src(kind: str, alt: str = "", **params) -> dict | None:
     """그림 블록의 출처. 슬랙에 올릴 수 있으면 slack_file(터널 주소가 바뀌어도 안 깨짐), 아니면 서명된 주소."""
     from roombot import slackfiles
     params = {k: v for k, v in params.items() if v is not None}
+    params["rev"] = IMAGE_VERSION
     if slackfiles.can_upload():
         key = (kind, tuple(sorted((k, str(v)) for k, v in params.items())), int(clock.now().timestamp() // 300))
         fid = slackfiles.cached(key)

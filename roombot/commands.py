@@ -290,11 +290,13 @@ def status_reply(only_floor: int | None = None, surface: str = "message") -> Rep
     if only_floor is not None:
         rows = [r for r in rows if r["floor"] == only_floor]
     title = f"{only_floor}층 회의실 현황" if only_floor is not None else "회의실 현황"
+    chart_title = f"{only_floor}층 회의실 일정" if only_floor is not None else "전체 회의실 일정"
     free_now = sum(1 for r in rows if r["state"] == "비어있음")
     reply = Reply(fallback=f"회의실 현황 {fmt_day(now.date())} {hm(now)} · 비어있음 {free_now}곳")
     reply.add(header(title),
               context(f"{style.DATE} *{fmt_day(now.date())} {hm(now)}* 기준", status_counts(rows)),
-              image(imgurl.src("board", "회의실 현황판", d=now.date().isoformat(), f=only_floor), "회의실 현황판 — 회의실별 오늘 예약 막대"),
+              image(imgurl.src("board", chart_title, d=now.date().isoformat(), f=only_floor),
+                    f"{chart_title} — 09:00–18:00, 회의명·예약 시간·상태"),
               actions(room_menu(now.date()), button("빈방 찾기", "open_finder", style="primary")))
     if surface == "modal":
         reply.add(divider(), *floor_sections(rows, now.date()))
