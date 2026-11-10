@@ -1,5 +1,7 @@
 # Slack QR Check · 회의실 예약·QR 체크인
 
+두 앱의 공통 설정·설치 흐름은 [Slack 공통 설정](docs/SLACK_SETUP.md)을 따릅니다.
+
 SQLite로 회의실·직원·예약·참석자·체크인·취소 이력을 저장하는 Slack 앱입니다. 다우오피스 연동은 사용하지 않습니다. 일반 실행에는 PostgreSQL이나 별도 DB 서버가 필요하지 않습니다.
 
 - Slack에서 회의실 현황, 일정, 빈 회의실, 내 예약과 노쇼 통계를 조회합니다.
@@ -33,7 +35,7 @@ uv run --locked python -m backend.cli db init
 uv run --locked python -m backend.main
 ```
 
-`doctor`는 로컬 설정 형식만 검사하며 Slack을 호출하거나 DB를 수정하지 않습니다. 오류가 있으면 종료 코드 1을 반환합니다. 비밀값은 `python -c "import secrets; print(secrets.token_urlsafe(48))"`를 두 번 실행해 각각 생성하고 `.env`의 `SECRET_KEY`, `QR_SECRET`에 넣으세요. `.env`가 읽히도록 저장소 폴더에서 명령을 실행합니다. Linux/macOS에서는 `chmod 600 .env`로 접근을 제한하세요.
+`doctor`는 로컬 설정 형식만 검사하며 Slack을 호출하거나 DB를 수정하지 않습니다. 오류가 있으면 종료 코드 1을 반환합니다. 비밀값은 `python -c "import secrets; print(secrets.token_urlsafe(48))"`를 두 번 실행해 각각 생성하고 `.env`의 `SECRET_KEY`, `QR_SECRET`에 넣으세요. 루트 `.env`를 읽으며 실행 환경변수가 우선합니다. 명령은 저장소 폴더에서 실행합니다. Linux/macOS에서는 `chmod 600 .env`로 접근을 제한하세요.
 
 ### .env 설정표
 
@@ -200,12 +202,14 @@ uv run python -m backend.simulations --clear-batch 생성된_batch_값
 3. 직원 이메일 또는 `--slack-user` 연결 후 실제 예약 1건을 생성하고 참석자 계정으로 QR 체크인·취소를 확인합니다.
 4. `missing_scope`는 앱 재설치, `not_in_channel`은 채널 참여, 이미지 누락은 HTTPS 주소·한글 폰트·프록시의 이미지 경로 연결을 확인합니다. QR 생성 전에 앱의 회의실 채널 준비가 끝나야 합니다.
 
-2026-11-10: 의존성은 2주 안정화 정책(2026-10-27 이전 배포)을 유지하며 lock을 갱신했습니다. 새 설치 환경에서 핵심 테스트 26개가 통과했습니다. 실제 Slack 토큰·워크스페이스 설치는 검증하지 않았습니다. CI는 Linux의 Python 3.12 설치·테스트를 수행합니다.
+2026-11-10: 의존성은 2주 안정화 정책(2026-10-27 이전 배포)을 유지하며 lock을 갱신했습니다. 새 설치 환경에서 핵심 테스트 28개가 통과했습니다. 실제 Slack 토큰·워크스페이스 설치는 검증하지 않았습니다. CI는 Linux의 Python 3.12 설치·테스트를 수행합니다.
 
 ## 수정할 파일 찾기
 
 ```text
 backend/                실행·Slack 이벤트·웹 인증·업무 로직·SQLite
+  config.py             .env·공통 설정
+  slack.py              토큰 확인·Socket Mode 연결
   main.py               앱 시작
   slack_app.py          명령·버튼 이벤트 연결
   web.py                HTTP·세션·Slack 로그인·체크인

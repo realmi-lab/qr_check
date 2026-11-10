@@ -9,9 +9,14 @@ from backend.config import settings
 
 def check(config=settings):
     errors, notes = [], []
+    from backend.slack import read_tokens
+    try:
+        read_tokens(config)
+    except ValueError as error:
+        errors.append(str(error))
+    if config.slack_notify_channel and not config.slack_notify_channel.startswith(('C', 'G')):
+        errors.append('SLACK_NOTIFY_CHANNEL: 채널 ID(C... 또는 G...)를 입력하세요.')
     for name, value, prefix in (
-        ('SLACK_BOT_TOKEN', config.slack_bot_token, 'xoxb-'),
-        ('SLACK_APP_TOKEN', config.slack_app_token, 'xapp-'),
         ('SLACK_TEAM_ID', config.slack_team_id, 'T'),
         ('SLACK_APP_ID', config.slack_app_id, 'A'),
     ):

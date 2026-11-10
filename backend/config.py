@@ -6,7 +6,8 @@ from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
 
-load_dotenv()
+ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT / ".env", override=False)
 
 
 def _bool(name: str, default: bool = False) -> bool:
@@ -19,21 +20,21 @@ def _list(name: str) -> list[str]:
 
 @dataclass
 class Settings:
-    sqlite_path: str = os.getenv("SQLITE_PATH", str(Path(__file__).resolve().parent.parent / "data" / "roombot.sqlite3"))
-    timezone: str = os.getenv("APP_TIMEZONE", "Asia/Seoul")
+    sqlite_path: str = str(ROOT / Path(os.getenv("SQLITE_PATH") or "data/roombot.sqlite3").expanduser())
+    timezone: str = (os.getenv("APP_TIMEZONE") or os.getenv("TZ") or "Asia/Seoul").strip()
     # 가상 시계: 이 시각부터 시간이 흐르는 것처럼 동작 (예: 2026-10-17T10:03+09:00)
     app_now: str | None = os.getenv("APP_NOW") or None
 
     # 슬랙 (봇 토큰 / Socket Mode 앱 토큰)
-    slack_bot_token: str | None = os.getenv("SLACK_BOT_TOKEN") or None
-    slack_app_token: str | None = os.getenv("SLACK_APP_TOKEN") or None
+    slack_bot_token: str | None = (os.getenv("SLACK_BOT_TOKEN") or "").strip() or None
+    slack_app_token: str | None = (os.getenv("SLACK_APP_TOKEN") or "").strip() or None
     # Sign in with Slack (QR 체크인 웹에서 사용자 확인)
     slack_client_id: str | None = os.getenv("SLACK_CLIENT_ID") or None
     slack_client_secret: str | None = os.getenv("SLACK_CLIENT_SECRET") or None
     slack_team_id: str | None = os.getenv("SLACK_TEAM_ID") or None
     slack_app_id: str | None = os.getenv("SLACK_APP_ID") or None
     # 노쇼로 회의실이 비었을 때 공지할 채널 (예: #회의실)
-    slack_notify_channel: str | None = os.getenv("SLACK_NOTIFY_CHANNEL") or None
+    slack_notify_channel: str | None = (os.getenv("SLACK_NOTIFY_CHANNEL") or os.getenv("SLACK_NOTIFICATION_CHANNEL") or "").strip() or None
 
     # QR 체크인 웹
     public_base_url: str = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")

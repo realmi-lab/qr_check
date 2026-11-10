@@ -8,3 +8,5 @@ README.md를 먼저 읽는다. frontend/는 화면·이미지·QR 출력, backen
 - 변경 후 `uv run --locked python -m pytest -q` 한 번. 실패나 추가 수정이 없으면 반복하지 않는다. 테스트는 예약·권한·체크인·노쇼·저장처럼 실제 위험이 있는 동작만 추가한다.
 - 실제 Slack 메시지를 보내는 검증은 테스트 워크스페이스 사용을 명시적으로 승인받았을 때만 한다.
 - 원격 게시까지 요청된 변경은 main에 올리고 상태를 확인한다.
+
+Slack 공통 설정은 docs/SLACK_SETUP.md를 따른다. 공통 키는 SLACK_BOT_TOKEN, SLACK_APP_TOKEN, SLACK_NOTIFY_CHANNEL, APP_TIMEZONE, SQLITE_PATH다. 설정은 backend/config, Slack 접속은 backend/slack에서 수정한다. 새 기능 때문에 공통 설정 이름을 다르게 만들지 않는다.

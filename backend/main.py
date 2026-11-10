@@ -71,6 +71,11 @@ def notify_url_change(client) -> None:
 
 
 def main() -> None:
+    from backend.slack import read_tokens, connect
+    try:
+        _, app_token = read_tokens()
+    except ValueError as error:
+        raise SystemExit(str(error)) from None
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     logging.getLogger("apscheduler").setLevel(logging.WARNING)   # 30초마다 남는 실행 기록은 숨김
     log.info("현재 시각 %s%s", clock.now().isoformat(timespec="minutes"), " (가상 시계)" if settings.app_now else "")
@@ -84,26 +89,21 @@ def main() -> None:
     scheduler.start(notifier)
     log.info("노쇼 스케줄러 시작 (알림: %s)", type(notifier).__name__)
 
-    if settings.slack_bot_token and settings.slack_app_token:
-        # 기본 연결 방식은 오래 켜 두면 'Broken pipe'로 다시 붙지 못하는 경우가 있어 websocket-client 방식을 씀
-        from slack_bolt.adapter.socket_mode.websocket_client import SocketModeHandler
-        from backend.slack_app import build_app
-        app = build_app()
-        handler = SocketModeHandler(app, settings.slack_app_token)
-        handler.connect()
-        threading.Thread(target=watch_slack, args=(handler,), daemon=True, name="slack-watchdog").start()
-        log.info("슬랙봇 연결됨 (Socket Mode)")
-        # 주소 변경 알림은 끔 (슬랙 채널 QR 방식이라 터널 주소를 쓰지 않음)
-        if settings.room_channels:
-            def _setup():
-                from backend import room_channels
-                try:
-                    log.info("회의실 채널 준비: %d개", room_channels.setup_all(app.client))
-                except Exception:
-                    log.exception("회의실 채널 준비 실패")
-            threading.Thread(target=_setup, daemon=True, name="room-channels").start()
-    else:
-        log.info("SLACK_BOT_TOKEN / SLACK_APP_TOKEN 이 없어 슬랙봇은 켜지 않음 (CLI로 확인 가능)")
+    # 기본 연결 방식은 오래 켜 두면 'Broken pipe'로 다시 붙지 못하는 경우가 있어 websocket-client 방식을 씀
+    from backend.slack_app import build_app
+    app = build_app()
+    handler = connect(app, app_token)
+    threading.Thread(target=watch_slack, args=(handler,), daemon=True, name="slack-watchdog").start()
+    log.info("슬랙봇 연결됨 (Socket Mode)")
+    # 주소 변경 알림은 끔 (슬랙 채널 QR 방식이라 터널 주소를 쓰지 않음)
+    if settings.room_channels:
+        def _setup():
+            from backend import room_channels
+            try:
+                log.info("회의실 채널 준비: %d개", room_channels.setup_all(app.client))
+            except Exception:
+                log.exception("회의실 채널 준비 실패")
+        threading.Thread(target=_setup, daemon=True, name="room-channels").start()
 
     log.info("QR 체크인 웹: %s", settings.public_base_url)
     try:
