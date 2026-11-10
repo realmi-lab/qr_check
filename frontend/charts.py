@@ -11,7 +11,7 @@ from functools import lru_cache
 
 from PIL import Image, ImageDraw, ImageFont
 
-from roombot import clock, rooms
+from backend import clock, rooms
 
 FONT_PATH = os.getenv("CHART_FONT_PATH") or next((str(p) for p in [
     Path("/System/Library/Fonts/AppleSDGothicNeo.ttc"),

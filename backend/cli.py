@@ -1,12 +1,12 @@
 """터미널에서 슬랙 없이 확인하는 CLI.
 
-  uv run python -m roombot.cli room now
-  uv run python -m roombot.cli room 무등 내일
-  uv run python -m roombot.cli room free 10/20 14:00 1h 6명
-  uv run python -m roombot.cli --as D0001 room my
-  uv run python -m roombot.cli --as D0001 checkin R19      QR 체크인 흉내 (토큰 확인 생략)
-  uv run python -m roombot.cli tick                        노쇼 처리·알림 한 번 실행 (알림은 화면에 출력)
-  uv run python -m roombot.cli qr                          회의실 QR 이미지 만들기
+  uv run python -m backend.cli room now
+  uv run python -m backend.cli room 무등 내일
+  uv run python -m backend.cli room free 10/20 14:00 1h 6명
+  uv run python -m backend.cli --as D0001 room my
+  uv run python -m backend.cli --as D0001 checkin R19      QR 체크인 흉내 (토큰 확인 생략)
+  uv run python -m backend.cli tick                        노쇼 처리·알림 한 번 실행 (알림은 화면에 출력)
+  uv run python -m backend.cli qr                          회의실 QR 이미지 만들기
 
   --now 2026-10-17T10:03   가상 시계로 실행
 """
@@ -18,7 +18,7 @@ import re
 import sys
 from datetime import datetime
 
-from roombot import checkin, clock, commands, rooms
+from backend import checkin, clock, commands, rooms
 
 
 def plain(mrkdwn: str) -> str:
@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
         at = datetime.fromisoformat(a.now)
         clock.freeze(at if at.tzinfo else at.replace(tzinfo=clock.TZ))
 
-    from roombot.db import backup, initialize, tx
+    from backend.db import backup, initialize, tx
     initialize()
     if a.cmd == "db":
         if a.operation == "backup":
@@ -106,15 +106,15 @@ def main(argv: list[str] | None = None) -> int:
         if len(found) != 1:
             print(f"회의실 '{a.room_code}'을(를) 하나로 특정하지 못했어요.", file=sys.stderr)
             return 1
-        from roombot import messages
+        from backend import messages
         res = checkin.check_in(found[0], emp["id"], source_ip="127.0.0.1", user_agent="cli")
         title, body = messages.checkin_page_text(res)
         print(f"[{res.kind}] {title}\n{body}")
     elif a.cmd == "tick":
-        from roombot import notifier, scheduler
+        from backend import notifier, scheduler
         scheduler.run_once(notifier.ConsoleNotifier())
     elif a.cmd == "qr":
-        from roombot import qr
+        from frontend import qr
         out = qr.generate(a.out)
         print(f"QR 이미지와 인쇄용 페이지를 만들었어요: {out}")
     return 0

@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from roombot.config import settings
+from backend.config import settings
 
 TZ = ZoneInfo(settings.timezone)
 

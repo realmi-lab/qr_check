@@ -47,7 +47,7 @@ EOF
 
 install() {
   mkdir -p "$AGENTS" "$LOGS"
-  plist com.roombot.server server /usr/bin/caffeinate -i -s "$ROOT/.venv/bin/python" -m roombot.main > "$AGENTS/com.roombot.server.plist"
+  plist com.roombot.server server /usr/bin/caffeinate -i -s "$ROOT/.venv/bin/python" -m backend.main > "$AGENTS/com.roombot.server.plist"
   plist com.roombot.tunnel tunnel "$ROOT/.venv/bin/python" "$ROOT/scripts/tunnel.py" > "$AGENTS/com.roombot.tunnel.plist"
   for l in "${LABELS[@]}"; do
     plutil -lint "$AGENTS/$l.plist" >/dev/null

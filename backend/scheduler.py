@@ -5,9 +5,9 @@ from datetime import datetime, time
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from roombot import checkin, clock, messages, rooms
-from roombot.config import settings
-from roombot.db import tx
+from backend import checkin, clock, messages, rooms
+from backend.config import settings
+from backend.db import tx
 
 log = logging.getLogger(__name__)
 
@@ -34,10 +34,10 @@ def run_once(notifier) -> dict:
 
     # 회의실 채널의 체크인 패널: 지금/다음 회의가 바뀐 것만 고침
     if settings.room_channels and getattr(notifier, "client", None) is not None:
-        from roombot import room_channels
+        from backend import room_channels
         room_channels.refresh_all(notifier.client)
     # 홈은 표만 사용하므로 그림은 상세 화면을 요청할 때 만들고, 정리만 시간마다 실행.
-    from roombot import slackfiles
+    from backend import slackfiles
     now = clock.now()
     if now.minute == 0 and now.second < 30:
         slackfiles.cleanup()

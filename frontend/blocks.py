@@ -6,7 +6,7 @@ from html import escape
 from dataclasses import dataclass, field
 
 
-from roombot.style import icon  # noqa: E402,F401  (예전 코드 호환: blocks.icon)
+from frontend.style import icon  # noqa: E402,F401  (예전 코드 호환: blocks.icon)
 
 
 @dataclass

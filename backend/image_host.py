@@ -15,9 +15,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, Response
 import uvicorn
 
-from roombot import imgurl
-from roombot.config import settings
-from roombot.web import chart_image
+from backend import imgurl
+from backend.config import settings
+from backend.web import chart_image
 
 log = logging.getLogger(__name__)
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)

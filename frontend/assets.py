@@ -1,6 +1,6 @@
 """이미지 만들기: 슬랙 앱 아이콘, 상태 커스텀 이모지, 파비콘, QR 가운데 로고.
 
-  .venv/bin/python -m roombot.assets      →  assets/ 폴더에 PNG 생성
+  .venv/bin/python -m frontend.assets      →  frontend/assets/ 폴더에 PNG 생성
 크게(4배) 그린 뒤 줄여서 가장자리를 부드럽게 함.
 """
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-OUT = Path(__file__).resolve().parent.parent / "assets"
+OUT = Path(__file__).resolve().parents[1] / "frontend" / "assets"
 S = 4  # 크게 그리는 배율
 
 PURPLE_TOP, PURPLE_BOTTOM = (138, 63, 160), (59, 13, 74)

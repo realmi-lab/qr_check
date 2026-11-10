@@ -13,11 +13,11 @@ import qrcode
 from PIL import Image
 from qrcode.constants import ERROR_CORRECT_H
 
-from roombot import icons
-from roombot.checkin import qr_tokens
-from roombot.config import settings
+from frontend import icons
+from backend.checkin import qr_tokens
+from backend.config import settings
 
-ASSETS = Path(__file__).resolve().parent.parent / "assets"
+ASSETS = Path(__file__).resolve().parents[1] / "frontend" / "assets"
 FONT, FONT_BOLD = "/System/Library/Fonts/AppleSDGothicNeo.ttc", 6
 
 
@@ -88,7 +88,7 @@ def generate(out_dir: str = "qr") -> Path:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     cards = []
-    from roombot import room_channels
+    from backend import room_channels
     channels = room_channels.mapping() if settings.room_channels else {}
     for r in qr_tokens():
         ch = channels.get(r["id"])

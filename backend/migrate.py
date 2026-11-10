@@ -11,7 +11,7 @@ import os
 from datetime import date, datetime
 from pathlib import Path
 
-from roombot import db
+from backend import db
 
 TABLES = (
     ('daou', 'rooms'), ('daou', 'employees'), ('daou', 'holidays'),

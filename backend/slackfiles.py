@@ -16,8 +16,8 @@ import time
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from roombot.config import settings
-from roombot.db import tx
+from backend.config import settings
+from backend.db import tx
 
 log = logging.getLogger(__name__)
 SCOPE_CHECK_EVERY = 600   # 권한 확인 주기(초): 앱 권한을 바꾸면 10분 안에 반영

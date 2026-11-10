@@ -10,9 +10,9 @@ from concurrent.futures import ThreadPoolExecutor
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from roombot import rooms
-from roombot.blocks import Reply, context
-from roombot.config import settings
+from backend import rooms
+from frontend.blocks import Reply, context
+from backend.config import settings
 
 log = logging.getLogger(__name__)
 

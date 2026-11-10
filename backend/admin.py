@@ -14,10 +14,11 @@
 
 from datetime import datetime, timedelta
 
-from roombot import clock, rooms, style
-from roombot.blocks import Reply, actions, button, context, divider, header, section
-from roombot.config import settings
-from roombot.db import tx
+from backend import clock, rooms
+from frontend import style
+from frontend.blocks import Reply, actions, button, context, divider, header, section
+from backend.config import settings
+from backend.db import tx
 
 KEYWORD = "qwerasdf"
 RED, AMBER = "#e5484d", "#f5a524"
@@ -33,7 +34,7 @@ def _hm(dt: datetime) -> str:
 
 
 def _when(a: datetime, b: datetime) -> str:
-    from roombot.commands import fmt_day
+    from backend.commands import fmt_day
     return f"{fmt_day(a.astimezone(clock.TZ).date())} *{_hm(a)}–{_hm(b)}*"
 
 
@@ -48,7 +49,7 @@ def usage() -> Reply:
 
 def parse(args: list[str]) -> tuple[dict | None, datetime | None, datetime | None, str, str | None]:
     """→ (회의실, 시작, 끝, 사유, 오류 문구)"""
-    from roombot.commands import parse_date, parse_duration, parse_time
+    from backend.commands import parse_date, parse_duration, parse_time
     if not args:
         return None, None, None, "", None
     found = rooms.find_rooms(args[0])
@@ -125,7 +126,7 @@ def preview(args: list[str]) -> Reply:
 
 def execute(room: dict, start: datetime, end: datetime, reason: str, admin_slack_user: str) -> tuple[Reply, list]:
     """강제 배정 실행. → (관리자에게 보여 줄 결과, [(직원, 알림)])"""
-    from roombot.commands import free_value
+    from backend.commands import free_value
     admin_emp = rooms.employee_by_slack_user(admin_slack_user)
     if not admin_emp:
         return Reply().add(section(f"{style.WARN} 관리자 슬랙 계정이 등록된 직원과 연결돼 있지 않아요.")), []

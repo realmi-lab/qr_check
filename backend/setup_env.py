@@ -1,6 +1,6 @@
 """슬랙 토큰을 .env에 넣는 로컬 전용 입력 페이지 (이 컴퓨터에서만 열림).
 
-  .venv/bin/python -m roombot.setup_env   →  http://127.0.0.1:8765
+  .venv/bin/python -m backend.setup_env   →  http://127.0.0.1:8765
 입력한 값은 화면이나 로그에 다시 보여주지 않고 .env 파일에만 저장한다.
 """
 

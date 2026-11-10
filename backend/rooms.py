@@ -5,8 +5,8 @@ import time
 from datetime import date, datetime, timedelta
 from datetime import time as dtime
 
-from roombot import clock
-from roombot.db import tx
+from backend import clock
+from backend.db import tx
 
 OPEN_TIME = dtime(9, 0)
 CLOSE_TIME = dtime(18, 0)

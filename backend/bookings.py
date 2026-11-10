@@ -3,8 +3,8 @@
 import sqlite3
 from datetime import datetime
 
-from roombot import clock
-from roombot.db import tx
+from backend import clock
+from backend.db import tx
 
 
 def reserve(room_id: int, organizer_id: int, start: datetime, end: datetime,

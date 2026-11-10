@@ -6,8 +6,8 @@ import json
 import random
 import uuid
 
-from roombot import clock
-from roombot.db import tx
+from backend import clock
+from backend.db import tx
 
 TITLES = ['팀 미팅', '프로젝트 리뷰', '기획 회의', '개발 점검', '디자인 리뷰', '주간 공유', '업무 협의', '운영 점검']
 

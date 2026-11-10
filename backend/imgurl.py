@@ -5,8 +5,8 @@ import hmac
 import time
 from urllib.parse import urlencode
 
-from roombot import clock
-from roombot.config import settings
+from backend import clock
+from backend.config import settings
 
 TTL = 7 * 86400   # 7일
 IMAGE_VERSION = "large-type-v4"   # 표시 변경 후에는 이전 이미지 캐시를 재사용하지 않음
@@ -39,7 +39,8 @@ def render(kind: str, params: dict) -> bytes | None:
     """그림 만들기 (웹 주소로 줄 때와 슬랙에 올릴 때 같이 씀)."""
     from datetime import date
 
-    from roombot import charts, rooms
+    from frontend import charts
+    from backend import rooms
     try:
         day = date.fromisoformat(str(params.get("d", "")))
     except ValueError:

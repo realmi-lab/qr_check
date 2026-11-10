@@ -8,8 +8,8 @@ from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from roombot import clock
-from roombot.config import settings
+from backend import clock
+from backend.config import settings
 
 _path: Path | None = None
 _ready: set[Path] = set()
@@ -88,7 +88,7 @@ def use_database(path: str | Path) -> None:
     if "://" in str(path):
         raise ValueError("SQLite 파일 경로를 지정하세요.")
     _path = Path(path).expanduser().resolve()
-    from roombot.rooms import clear_cache
+    from backend.rooms import clear_cache
     clear_cache()
 
 

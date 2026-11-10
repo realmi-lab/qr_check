@@ -4,7 +4,7 @@ import shutil
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from roombot.config import settings
+from backend.config import settings
 
 
 def check(config=settings):
@@ -40,7 +40,7 @@ def check(config=settings):
         errors.append('IMAGE_TUNNEL=true: cloudflared를 설치하거나 CLOUDFLARED_BIN을 설정하세요.')
     if config.demo_mode or config.app_now or config.notify_override_slack_user:
         errors.append('실사용 전 DEMO_MODE=false, APP_NOW와 NOTIFY_OVERRIDE_SLACK_USER를 비우세요.')
-    from roombot.charts import FONT_PATH
+    from frontend.charts import FONT_PATH
     if not FONT_PATH or not Path(FONT_PATH).is_file():
         errors.append('한글 폰트를 찾지 못했습니다. CHART_FONT_PATH를 설정하세요.')
     if not config.image_base_url.startswith('https://') and not config.public_base_url.startswith('https://') and not config.image_tunnel:

@@ -3,11 +3,12 @@
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from roombot import clock, style
-from roombot.config import settings
-from roombot.blocks import Reply, actions, button, context, divider, header, icon, section
-from roombot.checkin import NOSHOW_GRACE, CheckinResult
-from roombot.commands import clip, fmt_day, free_value, hm, mins, room_value, span
+from backend import clock
+from frontend import style
+from backend.config import settings
+from frontend.blocks import Reply, actions, button, context, divider, header, icon, section
+from backend.checkin import NOSHOW_GRACE, CheckinResult
+from backend.commands import clip, fmt_day, free_value, hm, mins, room_value, span
 
 GRACE_MIN = int(NOSHOW_GRACE.total_seconds() // 60)
 
@@ -53,7 +54,7 @@ def receipt_rows(rc: dict) -> list[tuple[str, str]]:
 
 def _now_in_room(room: dict) -> str:
     """이 회의실의 지금 예약 (없으면 다음 예약)."""
-    from roombot import rooms
+    from backend import rooms
     now = clock.now()
     sched = [r for r in rooms.room_schedule(room["id"], now.date()) if r["state"] != "노쇼 취소" and r["end_at"] > now]
     cur = next((r for r in sched if r["start_at"] <= now), None)
@@ -266,7 +267,7 @@ def checkin_reply(res: CheckinResult) -> Reply:
 
 def send_checkin_messages(notifier, res: CheckinResult, employee_id: int) -> None:
     """체크인 후 알림: 본인 DM(확인증) · 예약자 DM · 공지 채널. 다른 회의실이면 내 회의실 안내 DM."""
-    from roombot import rooms
+    from backend import rooms
     me = rooms.employee_by_id(employee_id)
     if res.kind == "wrong_room":
         if me:

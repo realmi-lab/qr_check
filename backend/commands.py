@@ -1,5 +1,5 @@
 """/룸 명령어(/room도 같음) 해석과 답변 만들기 (슬랙 Block Kit). 슬랙봇·홈 탭·터미널 CLI가 같이 씀.
-표기(아이콘·상태 이름)는 roombot/style.py 규칙을 따름.
+표기(아이콘·상태 이름)는 frontend/style.py 규칙을 따름.
 
   /룸                            도움말
   /룸 now | 현황                  지금 전체 회의실 현황 (층별 표)
@@ -14,12 +14,13 @@
 import re
 from datetime import date, datetime, time, timedelta
 
-from roombot import clock, imgurl, rooms, style
-from roombot.blocks import (B, I, S, Reply, actions, button, context, divider, grouped_select, header, image, rt,
+from backend import clock, imgurl, rooms
+from frontend import style
+from frontend.blocks import (B, I, S, Reply, actions, button, context, divider, grouped_select, header, image, rt,
                             section, select, table, tables)
-from roombot.checkin import CHECKIN_OPENS_BEFORE, NOSHOW_GRACE
-from roombot.config import settings
-from roombot.style import icon
+from backend.checkin import CHECKIN_OPENS_BEFORE, NOSHOW_GRACE
+from backend.config import settings
+from frontend.style import icon
 
 WEEKDAYS = "월화수목금토일"
 ACTIVE = ("사용중", "체크인 대기", "노쇼 처리 대기")
@@ -184,14 +185,14 @@ def handle(text: str, employee: dict | None, slack_user_id: str | None = None) -
         return stats_reply()
     if cmd in ("link", "연결"):
         return link_reply(args, slack_user_id)
-    from roombot import admin
+    from backend import admin
     if cmd == admin.KEYWORD and admin.is_admin(slack_user_id):
         return admin.preview(args)
     return room_reply(words)
 
 
 def booking_reply(cmd: str, args: list[str], employee: dict | None, slack_user_id: str | None) -> Reply:
-    from roombot import admin, bookings
+    from backend import admin, bookings
     if not employee:
         return _not_linked()
     usage = "`/룸 예약 9A 내일 14:00 1h 회의제목`\n`/룸 취소 예약번호`\n`/룸 참석자 예약번호 사번` (슬랙 @멘션도 가능)"

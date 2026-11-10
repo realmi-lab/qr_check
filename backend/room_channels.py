@@ -17,10 +17,11 @@ from urllib.parse import urlencode
 
 from slack_sdk.errors import SlackApiError
 
-from roombot import clock, rooms, style
-from roombot.blocks import actions, button, context, header, section
-from roombot.config import settings
-from roombot.db import tx
+from backend import clock, rooms
+from frontend import style
+from frontend.blocks import actions, button, context, header, section
+from backend.config import settings
+from backend.db import tx
 
 log = logging.getLogger(__name__)
 REPOST_AFTER = timedelta(days=30)
@@ -120,11 +121,11 @@ def ensure_channel(client, room: dict) -> str:
 
 def _now_info(room: dict) -> tuple[list[str], bool]:
     """패널 글자: 지금 체크인할 회의가 있으면 '체크인하시겠습니까? 유효시간은 …까지입니다.'"""
-    from roombot.checkin import CHECKIN_OPENS_BEFORE, NOSHOW_GRACE
-    from roombot.commands import clip, hm, mins, span
+    from backend.checkin import CHECKIN_OPENS_BEFORE, NOSHOW_GRACE
+    from backend.commands import clip, hm, mins, span
     now = clock.now()
     today = [r for r in rooms.room_schedule(room["id"], now.date()) if r["end_at"] > now]
-    from roombot import admin
+    from backend import admin
     blocked = admin.block_ids([r["id"] for r in today])   # 관리자 배정은 체크인 받지 않음
     # 체크인 받을 회의: 시작 10분 전 ~ 시작 10분 후, 아직 아무도 체크인 안 함
     due = next((r for r in today if r["start_at"] - CHECKIN_OPENS_BEFORE <= now < r["start_at"] + NOSHOW_GRACE

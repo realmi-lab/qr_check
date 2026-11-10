@@ -13,9 +13,9 @@ import hmac
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from roombot import clock
-from roombot.config import settings
-from roombot.db import tx
+from backend import clock
+from backend.config import settings
+from backend.db import tx
 
 CHECKIN_OPENS_BEFORE = timedelta(minutes=10)
 NOSHOW_GRACE = timedelta(minutes=10)

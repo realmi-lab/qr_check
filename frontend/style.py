@@ -10,7 +10,7 @@
 시간은 굵게(*09:00–10:00*) 씀. `코드` 모양은 슬랙에서 빨간 글자로 보여서 명령어에만 씀.
 """
 
-from roombot.config import settings
+from backend.config import settings
 
 # 상태 → (기본 아이콘, 커스텀 이모지, 보이는 이름)
 # 화면에 보이는 상태는 4가지뿐: 사용중 · 체크인 대기 · 종료 · 예약없음 (예정 회의는 상태 표시 없음)

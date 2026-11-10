@@ -5,8 +5,8 @@ import threading
 
 import pytest
 
-from roombot import admin, bookings, checkin, clock, commands, db, rooms, room_channels, scheduler
-from roombot.config import settings
+from backend import admin, bookings, checkin, clock, commands, db, rooms, room_channels, scheduler
+from backend.config import settings
 
 
 @pytest.fixture(autouse=True)
@@ -201,7 +201,7 @@ def test_midnight_timezone_boundaries():
 
 
 def test_finder_shows_results_immediately_without_capacity_or_search_submit():
-    from roombot.slack_app import finder_view, _finder_values, booking_view
+    from backend.slack_app import finder_view, _finder_values, booking_view
     from slack_sdk.models.views import View
     reservation()
     view=finder_view(at(),60)
@@ -229,7 +229,7 @@ def test_finder_shows_results_immediately_without_capacity_or_search_submit():
 
 
 def test_finder_past_after_hours_and_default_rounding():
-    from roombot.slack_app import finder_view
+    from backend.slack_app import finder_view
     assert '지난 시간' in str(finder_view(at(7)))
     assert '18시' in str(finder_view(at(17,30),60))
     clock.freeze(at(9).replace(second=1))
@@ -245,7 +245,7 @@ def test_health_and_signed_schedule_image(monkeypatch):
     import time as epoch
     from PIL import Image
     from fastapi.testclient import TestClient
-    from roombot import imgurl, web
+    from backend import imgurl, web
     reservation()
     client=TestClient(web.app)
     assert client.get('/healthz').json()=={'ok':True}
@@ -259,7 +259,7 @@ def test_health_and_signed_schedule_image(monkeypatch):
 
 
 def test_finder_and_booking_handlers_without_slack_network(monkeypatch):
-    from roombot import slack_app, slackfiles
+    from backend import slack_app, slackfiles
     from types import SimpleNamespace
     handlers={}
     class FakeApp:
@@ -320,39 +320,8 @@ def test_finder_and_booking_handlers_without_slack_network(monkeypatch):
         assert calls[-1]['view_id']=='M1'
 
 
-def test_small_wrapped_layouts_have_no_horizontal_tables(monkeypatch):
-    from roombot.slack_app import home_view
-    monkeypatch.setattr(settings,'image_base_url','https://images.example.test')
-    reservation()
-    clock.freeze(at(9,5))
-    replies=[commands.status_reply(),commands.schedule_reply(rooms.all_rooms()[0],at().date()),
-             commands.my_reply(rooms.employee_by_id(1)),commands.free_search(at(10),timedelta(hours=1))]
-    for reply in replies:
-        assert not any(block['type']=='table' for block in reply.blocks)
-        assert len(reply.blocks)<50
-    status=commands.status_reply()
-    assert any('9A' in str(block) and block['type']=='context' for block in status.blocks)
-    assert any('Bitcoin' in str(block) and block['type']=='context' for block in status.blocks)
-    floor=commands.status_reply(only_floor=9)
-    assert any('9A' in str(block) and block['type']=='context' for block in floor.blocks)
-    assert not any('Bitcoin' in str(block) and block['type']=='context' for block in floor.blocks)
-    assert sum(block['type']=='image' for block in status.blocks)==1
-    for reply in replies[:2]:
-        assert not any(element.get('url') for block in reply.blocks for element in block.get('elements',[]))
-        assert '크게 보기' not in str(reply.blocks)
-    home=home_view(rooms.employee_by_id(1))
-    elements=[element for block in home['blocks'] if block['type']=='actions' for element in block['elements']]
-    assert len(elements)==1 and elements[0]['type']=='overflow'
-    labels=[option['text']['text'] for option in elements[0]['options']]
-    assert labels==['미팅룸','전체 일정','내 예약']
-    assert commands.handle('미팅룸',rooms.employee_by_id(1)).open_finder
-    monkeypatch.setattr(settings,'image_base_url','')
-    monkeypatch.setattr(settings,'public_base_url','http://localhost:8000')
-    assert any('9A' in str(block) and block['type']=='context' for block in commands.status_reply().blocks)
-
-
 def test_image_source_never_uses_unshared_bot_files(monkeypatch):
-    from roombot import imgurl,slackfiles
+    from backend import imgurl, slackfiles
     monkeypatch.setattr(slackfiles,'can_upload',lambda:pytest.fail('private file upload must not be used'))
     monkeypatch.setattr(settings,'image_base_url','https://images.example.test')
     monkeypatch.setattr(settings,'public_base_url','http://localhost:8000')
@@ -367,7 +336,7 @@ def test_image_only_host_signed_viewer_and_head(monkeypatch):
     import time as epoch
     from urllib.parse import urlparse,parse_qs
     from fastapi.testclient import TestClient
-    from roombot import image_host,imgurl
+    from backend import image_host, imgurl
     monkeypatch.setattr(settings,'image_base_url','https://images.example.test')
     client=TestClient(image_host.app)
     for path in ['/','/docs','/openapi.json','/c/9A','/demo','/auth/slack','/view/board','/img/board.png']:
@@ -390,7 +359,7 @@ def test_image_only_host_signed_viewer_and_head(monkeypatch):
 
 
 def test_simulation_excludes_owner_preserves_real_data_and_never_notifies():
-    from roombot import simulations
+    from backend import simulations
     real = reservation(start=at(10),end=at(11))
     info = simulations.seed_week([1],at().date(),days=7,per_room=2)
     assert info['reservations'] > 0

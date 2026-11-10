@@ -10,13 +10,14 @@ from datetime import date, datetime, time, timedelta
 from slack_bolt import App
 from slack_sdk.errors import SlackApiError
 
-from roombot import clock, commands, rooms, style
-from roombot.blocks import Reply, actions, button, context, divider, header, section
-from roombot.config import settings
+from backend import clock, commands, rooms
+from frontend import style
+from frontend.blocks import Reply, actions, button, context, divider, header, section
+from backend.config import settings
 
 log = logging.getLogger(__name__)
 
-FINDER_ID = "finder"
+from frontend.slack_views import FINDER_ID, modal, finder_view, booking_view, home_view
 
 
 # ---------------------------------------------------------------
@@ -53,17 +54,10 @@ _notifier_cache = {}
 
 def _notifier(client):
     """버튼 처리에서 쓸 알림 보내는 곳 (같은 슬랙 클라이언트 재사용)."""
-    from roombot.notifier import SlackNotifier
+    from backend.notifier import SlackNotifier
     if "n" not in _notifier_cache:
         _notifier_cache["n"] = SlackNotifier(client)
     return _notifier_cache["n"]
-
-
-def modal(title: str, reply: Reply, callback_id: str = "info") -> dict:
-    return {"type": "modal", "callback_id": callback_id,
-            "title": {"type": "plain_text", "text": title[:24], "emoji": True},
-            "close": {"type": "plain_text", "text": "닫기"},
-            "blocks": reply.blocks[:100]}
 
 
 def show(body: dict, client, respond, make, title: str, replace: bool = False) -> None:
@@ -73,7 +67,7 @@ def show(body: dict, client, respond, make, title: str, replace: bool = False) -
     trigger = body.get("trigger_id")
     if container.get("type") == "view":
         view = body.get("view") or {}
-        from roombot import slackfiles
+        from backend import slackfiles
         with slackfiles.no_wait():          # 창은 3초 안에 열어야 함 (trigger_id 만료)
             reply = make("modal")
         if view.get("type") == "modal":
@@ -97,55 +91,6 @@ def _parse_room_value(value: str) -> tuple[dict | None, date]:
 # 미팅룸 창
 # ---------------------------------------------------------------
 
-def finder_view(initial: datetime | None = None, minutes: int = 60, notice: str = "") -> dict:
-    start = initial or rooms.default_start()
-    if initial is None:
-        if start.time() < rooms.OPEN_TIME:
-            start = datetime.combine(start.date(), rooms.OPEN_TIME, clock.TZ)
-        elif start.time() >= rooms.CLOSE_TIME:
-            start = datetime.combine(start.date() + timedelta(days=1), rooms.OPEN_TIME, clock.TZ)
-    dur_opts = [("30분", "30"), ("1시간", "60"), ("1시간 30분", "90"), ("2시간", "120"), ("3시간", "180")]
-    time_opts = [(f"{h:02d}:{m:02d}", f"{h:02d}:{m:02d}") for h in range(9,18) for m in (0,30)]
-    if start.strftime("%H:%M") not in {v for _,v in time_opts}:
-        time_opts.append((start.strftime("%H:%M"), start.strftime("%H:%M")))
-        time_opts.sort()
-    if str(minutes) not in {v for _,v in dur_opts}:
-        dur_opts.append((f"{minutes}분", str(minutes)))
-
-    def opt(label, value):
-        return {"text": {"type": "plain_text", "text": label}, "value": value}
-
-    blocks = [
-        {"type": "section", "block_id": "date", "text": {"type": "mrkdwn", "text": "날짜"},
-         "accessory": {"type": "datepicker", "action_id": "finder_date", "initial_date": start.date().isoformat()}},
-        {"type": "section", "block_id": "time", "text": {"type": "mrkdwn", "text": "시작"},
-         "accessory": {"type": "static_select", "action_id": "finder_time",
-                     "options": [opt(*o) for o in time_opts], "initial_option": opt(start.strftime("%H:%M"),start.strftime("%H:%M"))}},
-        {"type": "section", "block_id": "dur", "text": {"type": "mrkdwn", "text": "사용 시간"},
-         "accessory": {"type": "static_select", "action_id": "finder_dur",
-                     "options": [opt(*o) for o in dur_opts],
-                     "initial_option": opt(*next(o for o in dur_opts if o[1]==str(minutes)))}},
-    ]
-    if notice:
-        blocks.append(section(notice))
-    end = start + timedelta(minutes=minutes)
-    if start < clock.now():
-        blocks.append(section("지난 시간이에요. 시작 시간을 다시 선택해 주세요."))
-    elif end.date() != start.date() or end.time() > rooms.CLOSE_TIME:
-        blocks.append(section("사용 시간이 18시를 넘어요. 시작이나 사용 시간을 바꿔 주세요."))
-    else:
-        found = rooms.free_rooms(start,end)
-        blocks.extend([divider(),context(f"*{commands.span(start,end)} · 예약 가능 {len(found)}곳*")])
-        for room in found[:40]:
-            value=json.dumps({'room':room['id'],'start':start.isoformat(),'minutes':minutes},separators=(',',':'))
-            blocks.append(section(f"*{room['label']}* · {room['capacity']}인",
-                                  accessory=button("예약",f"book_room:{room['id']}",value)))
-        if not found:
-            blocks.append(section("예약 가능한 미팅룸이 없어요. 시간을 바꿔 주세요."))
-    return {"type":"modal","callback_id":FINDER_ID,
-            "title":{"type":"plain_text","text":"미팅룸"},
-            "close":{"type":"plain_text","text":"닫기"},"blocks":[b for b in blocks if b]}
-
 
 def _finder_values(view: dict) -> tuple[datetime, timedelta]:
     values=view["state"]["values"]
@@ -155,38 +100,9 @@ def _finder_values(view: dict) -> tuple[datetime, timedelta]:
     return datetime.combine(day,at,clock.TZ),duration
 
 
-def booking_view(value: str) -> dict:
-    data=json.loads(value)
-    room=next(r for r in rooms.all_rooms() if r['id']==data['room'])
-    start=datetime.fromisoformat(data['start'])
-    end=start+timedelta(minutes=data['minutes'])
-    return {"type":"modal","callback_id":"booking_form","private_metadata":value,
-            "title":{"type":"plain_text","text":"회의실 예약"},
-            "submit":{"type":"plain_text","text":"예약"},"close":{"type":"plain_text","text":"취소"},
-            "blocks":[section(f"*{room['label']}* · {commands.fmt_day(start.date())} {commands.span(start,end)}"),
-                      {"type":"input","block_id":"title","label":{"type":"plain_text","text":"회의 제목"},
-                       "element":{"type":"plain_text_input","action_id":"title","max_length":200}},
-                      context("예약 후 `/룸 참석자 예약번호 사번`으로 참석자를 추가할 수 있어요.")]}
-
-
 # ---------------------------------------------------------------
 # 앱 홈 대시보드
 # ---------------------------------------------------------------
-
-def home_view(employee: dict | None) -> dict:
-    now = clock.now()
-    rows = rooms.status_now()
-    free_now = sum(1 for r in rows if r["state"] == "비어있음")
-    blocks: list[dict] = [
-        header("회의실봇"),
-        context(f"{style.DATE} *{commands.fmt_day(now.date())} {commands.hm(now)}* 기준   지금 비어 있는 회의실 *{free_now}곳*"),
-        commands.quick_actions(),
-    ]
-    if employee:
-        blocks += commands.next_meeting_block(employee)
-    else:
-        blocks += commands._not_linked().blocks
-    return {"type": "home", "blocks": [b for b in blocks if b][:100]}
 
 
 # ---------------------------------------------------------------
@@ -198,7 +114,7 @@ def build_app() -> App:
     # 봇 토큰을 무시함. 이 둘은 QR 웹의 Slack 로그인에만 쓰므로(settings에 이미 읽어 둠) Bolt에서는 숨김.
     for key in ("SLACK_CLIENT_ID", "SLACK_CLIENT_SECRET"):
         os.environ.pop(key, None)
-    from roombot import slackfiles
+    from backend import slackfiles
     slackfiles.install_guard()
     app = App(token=settings.slack_bot_token)
 
@@ -292,7 +208,7 @@ def build_app() -> App:
 
         봇 DM·홈·명령어로는 체크인할 수 없음. 채널에서 내보내지 않음 (내보내면 슬랙이 '퇴장' 알림을 보냄).
         """
-        from roombot import checkin, messages, room_channels
+        from backend import checkin, messages, room_channels
         emp = employee_for(client, slack_user_id)
         res = checkin.check_in(room, emp["id"], source_ip=None, user_agent=how) if emp else None
         log.info("채널 체크인 시도: %s · %s · %s → %s", room["code"], emp["name"] if emp else slack_user_id, how,
@@ -333,7 +249,7 @@ def build_app() -> App:
             log.exception("체크인 안내 DM 실패")
 
     def room_of_channel(channel_id: str) -> dict | None:
-        from roombot import room_channels
+        from backend import room_channels
         rid = next((rid for rid, m in room_channels.mapping().items() if m["channel_id"] == channel_id), None)
         return next((r for r in rooms.all_rooms() if r["id"] == rid), None) if rid else None
 
@@ -356,7 +272,7 @@ def build_app() -> App:
         room = room_of_channel(event.get("channel", ""))
         if room:
             # 채널 참여만으로는 체크인하지 않음 → 체크인은 언제나 [✅ 체크인] 버튼 (헷갈리지 않게 한 가지 방법만)
-            from roombot import room_channels
+            from backend import room_channels
             _, due = room_channels._now_info(room)
             text = ("채널에 참여했어요. 체크인하려면 아래 *[✅ 체크인]* 을 눌러 주세요." if due
                     else "채널에 참여했어요. 체크인 시간(회의 시작 10분 전~10분 후)에 QR을 찍고 위 패널의 *[✅ 체크인]* 을 눌러 주세요.")
@@ -382,7 +298,7 @@ def build_app() -> App:
     @app.action("admin_force")
     def admin_force(ack, body, client, respond):
         ack()
-        from roombot import admin, room_channels
+        from backend import admin, room_channels
         uid = body["user"]["id"]
         if not admin.is_admin(uid):
             return
@@ -475,7 +391,7 @@ def build_app() -> App:
 
     @app.view("booking_form")
     def booking_submit(ack, body, view, client):
-        from roombot import bookings
+        from backend import bookings
         emp=rooms.employee_by_slack_user(body['user']['id'])
         if not emp:
             ack(response_action="errors",errors={"title":"직원 연결을 먼저 확인해 주세요."})
