@@ -19,7 +19,7 @@ features:
       should_escape: false
 oauth_config:
   redirect_urls:
-    - https://anything-aluminum-golf-termination.trycloudflare.com/auth/slack/callback
+    - https://YOUR-DOMAIN.example/auth/slack/callback
   scopes:
     user:
       - openid
@@ -30,6 +30,11 @@ oauth_config:
       - chat:write
       - im:history
       - im:write
+      - channels:read
+      - channels:manage
+      - channels:join
+      - channels:history
+      - pins:write
       - users:read
       - users:read.email
 settings:
@@ -37,6 +42,7 @@ settings:
     bot_events:
       - app_home_opened
       - message.im
+      - member_joined_channel
   interactivity:
     is_enabled: true
   org_deploy_enabled: false

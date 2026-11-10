@@ -1,4 +1,4 @@
-# 회의실봇
+# Slack QR Check · 회의실 예약·QR 체크인
 
 SQLite로 회의실·직원·예약·참석자·체크인·취소 이력을 저장하는 Slack 앱입니다. 다우오피스 연동은 사용하지 않습니다. 일반 실행에는 PostgreSQL이나 별도 DB 서버가 필요하지 않습니다.
 
@@ -11,15 +11,53 @@ SQLite로 회의실·직원·예약·참석자·체크인·취소 이력을 저�
 
 ## 설치와 실행
 
-Python 3.12 이상과 [uv](https://docs.astral.sh/uv/getting-started/installation/)를 사용합니다.
+### 새 설치에 필요한 것
+
+- Python 3.12 이상, Git, [uv](https://docs.astral.sh/uv/getting-started/installation/). macOS·Linux·Windows에서 터미널 실행 가능하며 자동 시작 스크립트만 macOS 전용입니다.
+- Slack 워크스페이스의 앱 생성·설치 권한과 Socket Mode의 외부 HTTPS/WebSocket 연결 허용.
+- 봇 토큰(`xoxb-`), `connections:write` 앱 토큰(`xapp-`), 워크스페이스 ID(`T...`), 앱 ID(`A...`).
+- 실제 직원 목록(사번·이름·이메일)과 회의실 목록. 이메일은 Slack 프로필과 전체 주소가 일치해야 합니다.
+- 쓰기 가능한 로컬 SQLite 저장 경로, 계속 켜 둘 실행 PC/서버. DB 서버·LLM·유료 AI 키는 필요하지 않습니다.
+- 일정 이미지용 한글 폰트. macOS는 Apple SD Gothic Neo, Windows는 맑은 고딕을 자동 검색합니다. Ubuntu는 `sudo apt-get install fonts-noto-cjk` 또는 `CHART_FONT_PATH`로 폰트 파일을 지정하세요.
 
 ```sh
+git clone https://github.com/realmi-lab/slack_qr_check.git
+cd slack_qr_check
 uv sync --locked
 cp .env.example .env
-# .env의 비밀값과 Slack 설정을 입력합니다.
-uv run python -m roombot.cli db init
-uv run python -m roombot.main
+# Windows PowerShell에서는 Copy-Item .env.example .env
+# 아래 Slack 앱을 설치하고 .env 설정을 채웁니다.
+uv run --locked python -m roombot.doctor
+uv run --locked python -m roombot.cli db init
+# 아래 employee-add / room-add로 실제 직원·회의실을 등록합니다.
+uv run --locked python -m roombot.main
 ```
+
+`doctor`는 로컬 설정 형식만 검사하며 Slack을 호출하거나 DB를 수정하지 않습니다. 오류가 있으면 종료 코드 1을 반환합니다. 비밀값은 `python -c "import secrets; print(secrets.token_urlsafe(48))"`를 두 번 실행해 각각 생성하고 `.env`의 `SECRET_KEY`, `QR_SECRET`에 넣으세요. `.env`가 읽히도록 저장소 폴더에서 명령을 실행합니다. Linux/macOS에서는 `chmod 600 .env`로 접근을 제한하세요.
+
+### .env 설정표
+
+| 항목 | 필수 여부 / 용도 |
+| --- | --- |
+| `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` | Slack 실행 필수. 설치한 앱의 봇 토큰과 connections:write 앱 토큰 |
+| `SLACK_TEAM_ID`, `SLACK_APP_ID` | 필수. 다른 워크스페이스의 ID를 섞지 않음 |
+| `SECRET_KEY`, `QR_SECRET` | 필수. 각각 다른 32자 이상 임의 값. 기존 설치에서는 유지 |
+| `SQLITE_PATH` | 기본 `./data/roombot.sqlite3`. 운영에는 절대 경로 권장 |
+| `APP_TIMEZONE` | 기본 `Asia/Seoul` |
+| `ROOM_CHANNELS` | 기본 `true`: Slack 회의실 채널 QR. 공개 웹 주소 없이 사용 가능 |
+| `LEAVE_AFTER_CHECKIN` | 기본 `true`: 체크인 후 채널에서 퇴장. 워크스페이스 정책에 맞춰 조정 |
+| `PUBLIC_BASE_URL` | 웹 QR 모드에서 휴대폰이 접속 가능한 HTTPS 주소 |
+| `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` | 웹 QR의 Sign in with Slack 사용 시 필수 |
+| `IMAGE_BASE_URL`, `IMAGE_PORT` | 선택. 일정 PNG용 HTTPS 주소와 로컬 포트(기본 8001) |
+| `IMAGE_TUNNEL`, `CLOUDFLARED_BIN` | 선택. 설치된 cloudflared로 임시 이미지 주소 제공 |
+| `WEB_PORT` | 기본 8000. 웹 QR·healthz 서버 |
+| `ADMIN_SLACK_USER` | 선택. 관리자 Slack ID(U...) |
+| `SLACK_NOTIFY_CHANNEL` | 선택. 노쇼로 빈 방이 생겼을 때 알림 채널 |
+| `MORNING_BRIEF_AT` | 기본 08:30. 빈 값은 아침 브리핑 끔 |
+| `CHECKIN_ALLOWED_CIDRS`, `TRUST_PROXY_HEADERS` | 선택. 웹 체크인 IP 정책·신뢰하는 프록시에만 사용 |
+| `CHART_FONT_PATH` | 자동 검색되지 않는 환경에서 한글 .ttf/.ttc 절대 경로 |
+| `ICON_SET`, `SESSION_DAYS` | 기본 unicode, 웹 세션 30일 |
+| `DEMO_MODE`, `APP_NOW`, `NOTIFY_OVERRIDE_SLACK_USER` | 실사용은 false / 빈 값 / 빈 값 |
 
 새 DB는 비어 있습니다. 샘플 직원이나 예약을 자동으로 넣지 않습니다. 기존 운영 기록이 있으면 아래 이관 절차를 먼저 수행하세요. `.env`, SQLite 파일, QR 토큰과 로그는 Git에 올리지 않습니다.
 
@@ -73,7 +111,14 @@ uv run python -m roombot.cli db status
 
 ## Slack·QR 설정
 
-`slack_manifest.yaml`을 기준으로 Slack 앱을 만들고 Socket Mode를 켭니다. `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, 워크스페이스/앱 ID를 `.env`에 입력합니다. 필요하면 `.venv/bin/python -m roombot.setup_env`의 로컬 입력 페이지를 사용할 수 있습니다.
+1. [Slack 앱 관리](https://api.slack.com/apps) → Create New App → From a manifest에서 `slack_manifest.yaml`을 사용합니다.
+2. 기본 채널 QR 모드는 매니페스트의 `redirect_urls`와 `scopes.user` 항목을 제거하고 생성하세요. 웹 QR 모드라면 예시 도메인을 실제 `PUBLIC_BASE_URL`로 바꾸고 Sign in with Slack의 Redirect URL에도 같은 `/auth/slack/callback`을 등록합니다.
+3. 워크스페이스에 설치해 OAuth & Permissions의 Bot User OAuth Token을 복사합니다.
+4. Socket Mode를 켜고 Basic Information → App-Level Tokens에서 `connections:write` 앱 토큰을 만듭니다.
+5. Basic Information의 App ID, 워크스페이스 URL/정보의 Team ID를 확인해 `.env`에 채웁니다.
+6. 매니페스트의 Bot Events와 Interactivity가 활성화됐는지 확인합니다. 권한을 바꾸면 앱을 다시 설치합니다.
+
+매니페스트에는 기본 채널 QR에 필요한 `channels:read`, `channels:manage`, `channels:join`, `channels:history`, `pins:write`, `member_joined_channel`도 포함합니다. 채널은 공개 채널로 생성됩니다. 워크스페이스가 봇의 채널 생성·퇴장을 금지하면 관리자에게 허용을 요청하거나 웹 QR 모드로 설정하세요. [Slack 채널 관리 권한](https://docs.slack.dev/reference/scopes/channels.manage/)을 참고하세요. `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, 워크스페이스/앱 ID를 `.env`에 입력합니다. 필요하면 `.venv/bin/python -m roombot.setup_env`의 로컬 입력 페이지를 사용할 수 있습니다.
 
 회의실 채널을 사용하는 경우 앱에 `channels:read`, `channels:manage`, `channels:join`, `channels:history`, `pins:write` 등 사용하는 Slack API에 맞는 권한과 `member_joined_channel` 이벤트가 필요합니다. 워크스페이스 정책에 따라 봇의 채널 관리 권한도 확인하세요. 기존 운영 앱은 현재 설치된 권한과 채널 연결을 그대로 사용합니다.
 
@@ -147,3 +192,12 @@ uv run python -m roombot.simulations --clear-batch 생성된_batch_값
 ```
 
 제목에 `[가상]`을 붙이고 별도 생성 묶음으로 추적합니다. 본인은 예약자·참석자 모두에서 제외합니다. 가상 예약은 실제 체크인, 노쇼 자동 취소, 리마인더·아침 브리핑·관리자 취소 DM, 실제 이용 통계에서 제외됩니다. 생성 묶음을 삭제해도 기존 실제 예약은 보존합니다. SQLite v1 DB는 앱 기동 시 v2로 자동 업그레이드되며 기존 기록은 유지됩니다.
+
+## 새 워크스페이스 설치 후 확인
+
+1. 앱 실행 로그의 `슬랙봇 연결됨`과 `curl --fail http://127.0.0.1:8000/healthz`를 확인합니다.
+2. Slack 앱 홈과 `/room 지금`에서 등록한 회의실이 보이는지 확인합니다. `/룸`은 매니페스트에 직접 추가해야 하며 기본 명령은 `/room`입니다.
+3. 직원 이메일 또는 `--slack-user` 연결 후 실제 예약 1건을 생성하고 참석자 계정으로 QR 체크인·취소를 확인합니다.
+4. `missing_scope`는 앱 재설치, `not_in_channel`은 채널 참여, 이미지 누락은 HTTPS 주소·한글 폰트·프록시의 이미지 경로 연결을 확인합니다. QR 생성 전에 앱의 회의실 채널 준비가 끝나야 합니다.
+
+2026-11-10: 의존성은 2주 안정화 정책(2026-10-27 이전 배포)을 유지하며 lock을 갱신했습니다. 새 설치 환경에서 테스트 28개가 통과했습니다. 실제 Slack 토큰·워크스페이스 설치는 검증하지 않았습니다. CI는 macOS·Linux의 Python 3.12 설치·테스트를 수행합니다.

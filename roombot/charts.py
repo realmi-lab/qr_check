@@ -4,6 +4,8 @@
 """
 
 import io
+import os
+from pathlib import Path
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 
@@ -11,7 +13,11 @@ from PIL import Image, ImageDraw, ImageFont
 
 from roombot import clock, rooms
 
-FONT_PATH = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
+FONT_PATH = os.getenv("CHART_FONT_PATH") or next((str(p) for p in [
+    Path("/System/Library/Fonts/AppleSDGothicNeo.ttc"),
+    Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+    Path("C:/Windows/Fonts/malgun.ttf"),
+] if p.is_file()), "")
 _WEIGHT = {"regular": 0, "medium": 2, "semibold": 4, "bold": 6}
 
 # 팔레트
@@ -32,7 +38,7 @@ OPEN_H, CLOSE_H = 9, 18
 @lru_cache(maxsize=64)
 def font(size: int, weight: str = "regular") -> ImageFont.FreeTypeFont:
     try:
-        return ImageFont.truetype(FONT_PATH, size, index=_WEIGHT[weight])
+        return ImageFont.truetype(FONT_PATH, size, index=_WEIGHT[weight] if FONT_PATH.endswith("AppleSDGothicNeo.ttc") else 0)
     except OSError:
         return ImageFont.load_default(size)
 
